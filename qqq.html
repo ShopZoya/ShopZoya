@@ -1,0 +1,2208 @@
+<!-- 
+    ========================================================================================================
+    SHOPZOYA E-COMMERCE - SINGLE FILE HTML/TAILWIND/JS APP 
+    (UPDATED: Product ID is now the sequential number 1 through 30, as requested)
+    ========================================================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShopZoya - E-commerce Ordering Workflow</title>
+    <!-- Tailwind CSS-i load seyyavum -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Azhagana icon-kalukkaga Lucide Icons-i load seyyavum -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Theme Colors */
+        :root {
+            --primary: #aa168c;
+            --secondary: #9000a8;
+        }
+
+        .custom-pink-purple { background-color: var(--primary); }
+        .custom-pink-purple-text { color: var(--primary); }
+        .custom-pink-purple-border { border-color: var(--primary); }
+        .bg-primary { background-color: var(--primary); }
+        .text-primary { color: var(--primary); }
+        .hover\:bg-secondary:hover { background-color: var(--secondary); }
+        
+        /* Mobile simulation-kaana App Container */
+        .app-container {
+            max-width: 480px;
+            height: 100vh;
+            margin: 0 auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden; /* Views-kulle content scroll aagum */
+            display: flex;
+            flex-direction: column;
+            background-color: #f0f2f5;
+            position: relative; 
+        }
+        
+        /* Views-kku ullirukkum scrollable content */
+        .view-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-bottom: 80px; 
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+        .view-content::-webkit-scrollbar {
+            display: none; /* Chrome, Safari and Opera */
+        }
+
+        /* Modal Backdrop Style */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.7);
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-container {
+            transition: transform 0.3s ease-in-out;
+        }
+        .modal-container.hidden {
+            transform: translateY(100%);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border-top-color: var(--primary);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Buyer Photo Grid-i sariyaana alavil kaatta */
+        .buyer-photo-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)); /* 4 columns for mobile */
+        }
+        
+        /* Custom Scrollbar hide for category tabs */
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;  /* Chrome, Safari, Opera*/
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div id="app" class="app-container">
+        <!-- Content will be rendered here by JavaScript -->
+    </div>
+
+    <!-- Product Image Modal (For Buyer Photos) -->
+    <div id="buyer-photo-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop hidden opacity-0" onclick="closeBuyerPhotoModal()">
+        <div class="bg-white rounded-2xl shadow-2xl p-4 w-11/12 max-w-sm m-4 modal-container transition-transform duration-300" onclick="event.stopPropagation()">
+            <div id="modal-content">
+                <!-- Modal content (image, review details) will be inserted here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Modal for 3-second delay -->
+    <div id="loading-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center flex flex-col items-center">
+            <div class="spinner w-12 h-12 border-4 border-dashed rounded-full mb-4"></div>
+            <p class="text-xl font-semibold text-gray-800">Processing Your Order...</p>
+            <p class="text-sm text-gray-500 mt-1">Please wait 3 seconds for confirmation.</p>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // --- GLOBAL VARIABLES ---
+        const APP_NAME = "ShopZoya"; 
+        const CATEGORIES = ['Fashion', 'Electronics', 'Home Decor', 'Kitchenware', 'Books']; 
+        let view = 'list'; 
+        let currentCategory = 'Fashion'; 
+        let selectedProductId = null; 
+        let cart = []; 
+        let selectedQuantity = 1; 
+
+        // Buyer photo display state-kku
+        let showAllBuyerPhotos = false;
+
+        // Firebase-kkaana global variables (canvas environment-la irundhu varum)
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- FIREBASE IMPORTS (Demo app, not actively used for data storage here) ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
+        // --- UTILITY FUNCTIONS ---
+
+        // Star icon-kalai render seyyavum
+        const renderStars = (rating) => {
+            const fullStar = '<i data-lucide="star" class="w-4 h-4 fill-yellow-500 text-yellow-500"></i>';
+            const emptyStar = '<i data-lucide="star" class="w-4 h-4 text-gray-300"></i>';
+            let stars = '';
+            for (let i = 0; i < 5; i++) {
+                stars += (i < rating) ? fullStar : emptyStar;
+            }
+            return `<div class="flex items-center space-x-0.5">${stars}</div>`;
+        };
+
+        // Price-i indian currency format-il format seyyavum
+        const formatPrice = (price) => {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                maximumFractionDigits: 0,
+            }).format(price);
+        };
+        
+        // 10 ilakkam random number-i generate seyyavum
+        const generateRandomId = (length) => {
+            let result = '';
+            const characters = '0123456789';
+            const charactersLength = characters.length;
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * charactersLength));
+            }
+            return result;
+        };
+        
+        // Loading state-i kaattavum
+        const renderLoading = () => {
+            return `
+                <div class="flex flex-col items-center justify-center h-full text-gray-500 p-8">
+                    <div class="spinner w-10 h-10 border-4 border-dashed rounded-full mb-4"></div>
+                    <p class="text-lg font-semibold">Loading...</p>
+                    <p class="text-sm">Please wait while the content loads.</p>
+                </div>
+            `;
+        };
+        
+        // Quantity tab selection-kku
+        const setSelectedQuantity = (qty) => {
+            selectedQuantity = qty;
+            if (view === 'detail') {
+                 render(); 
+                 attachDetailListeners(); 
+            }
+        };
+
+
+        // ====================================================================================================
+        // --- DYNAMIC PRODUCT DATA GENERATION (30 Products) ---
+        // ====================================================================================================
+
+        const PRODUCT_NAMES = [
+            "Premium Cotton Kurti", "Wireless Noise-Cancelling Headphones", "Bohemian Dream Catcher", 
+            "Non-Stick Wok Pan", "Classic Hardcover Novel", "Vintage Leather Wallet", 
+            "Gaming Mechanical Keyboard", "Handcrafted Wooden Clock", "Electric Kettle 1.8L",
+            "Yoga Mat 6mm Thick", "Digital Fitness Tracker", "Bamboo Desk Organizer"
+        ];
+        
+        // Static comments only for realism. Customer names are now COS1 to COS600.
+        const CUSTOMER_COMMENTS = [
+            "Sari romba alaga irukku! Quality nallaa irukku, delivery seekkirama vandhuchu. Highly recommended!",
+            "Idhu enaku romba pidichiruku. Neril paaka innum azhaga irukku. Nalla color combination. Expectation met!",
+            "Super product! Price-um reasonable. Next time vera color vaanganum nu irukken. Worth the money!",
+            "Ithoda material romba soft a irukku. Comfortable-a irukku. Thank you! Excellent for the price.",
+            "Oru chinna function-kku vaanginen. Ellarum nallaa irukku nu sonanga. Great buy.",
+            "Quick delivery and excellent service. Will definitely buy again from this store. Highly satisfied.",
+            "Expected-a vida nallaa irukku. Ippadi oru quality-a intha vilaiyil expect pannala. Five stars!",
+            "En Amma-vukku vaanginen. Avanga romba santhoshapattanga. Good gift choice.",
+            "The material is luxurious and the fit is perfect. Loved the vibrant hues. True to picture.",
+            "Bought this for a gift, and the recipient absolutely loved it. Highly recommended seller."
+        ];
+
+        /**
+         * 30 தயாரிப்புகளுக்கு, ஒவ்வொரு தயாரிப்புக்கும் 20 வாடிக்கையாளர் மதிப்புரைகளை உருவாக்கும்.
+         * வாடிக்கையாளர்கள் COS1, COS2, ... COS600 என்ற தனித்த வரிசைப்படி இருப்பார்கள்.
+         * @param {string} productId - தயாரிப்பின் தனிப்பட்ட ID.
+         * @param {number} productIndex - தயாரிப்பின் வரிசை எண் (1 முதல் 30 வரை).
+         */
+        const generateBuyerReviews = (productId, productIndex) => {
+            const reviews = [];
+            // 20 வெவ்வேறு வண்ணங்கள், 20 வாடிக்கையாளர்களைத் தனித்துக்காட்ட.
+            const avatarColors = ["AD1457", "4CAF50", "FF9800", "2196F3", "00BCD4", "FF5722", "607D8B", "9C27B0", "009688", "F44336", "FFC107", "8BC34A", "CDDC39", "FFEB3B", "795548", "9E9E9E", "673AB7", "3F51B5", "03A9F4", "009688"]; 
+            
+            // தயாரிப்பு வரிசை எண் i = 1 என்றால், வாடிக்கையாளர்கள் 1 முதல் 20 வரை (startIndex = 1)
+            // தயாரிப்பு வரிசை எண் i = 2 என்றால், வாடிக்கையாளர்கள் 21 முதல் 40 வரை (startIndex = 21)
+            const totalReviews = 20; 
+            const startIndex = ((productIndex - 1) * totalReviews) + 1; // 1, 21, 41, ... 581
+
+            for (let j = 0; j < totalReviews; j++) {
+                const globalCustomerIndex = startIndex + j; // COS index (1 to 600)
+                const customerName = `COS${globalCustomerIndex}`; 
+                
+                // Cycle through the available static comments for realism
+                const comment = CUSTOMER_COMMENTS[j % CUSTOMER_COMMENTS.length]; 
+                const rating = Math.floor(Math.random() * (5 - 4 + 1)) + 4; // 4 or 5 stars
+                
+                reviews.push({
+                    // Review ID now uses the global customer index
+                    id: `${productId}_C${globalCustomerIndex}`, 
+                    customerName: customerName,
+                    // Avatar uses the index and unique color
+                    customerAvatar: `https://placehold.co/100x100/${avatarColors[j % avatarColors.length]}/ffffff?text=C${globalCustomerIndex}`,
+                    rating: rating,
+                    comment: `[Product ${productIndex}, COS${globalCustomerIndex}] - ${comment}`, // Added context
+                });
+            }
+            return reviews;
+        };
+
+        /**
+         * Product index-ஐப் பயன்படுத்தி ஒரு தனிப்பட்ட தயாரிப்பு ஆப்ஜெக்ட்டை உருவாக்கும்.
+         * @param {number} i - தயாரிப்பு வரிசை எண் (1 முதல் 30 வரை).
+         */
+        const createSingleProduct = (i) => {
+            const categoryIndex = i % CATEGORIES.length;
+            const category = CATEGORIES[categoryIndex];
+            const nameIndex = i % PRODUCT_NAMES.length;
+            
+            // Unique Pricing/Details for each sequential product (1 to 30)
+            const basePrice = (categoryIndex === 0 ? 5000 : categoryIndex === 1 ? 25000 : categoryIndex === 2 ? 1500 : 3000) + (i * 100);
+            const originalPrice = basePrice + Math.floor(basePrice * 0.25); // 25% extra
+            const discountPercent = 20 + (i % 5); // 20% to 24% discount
+            const price = Math.round(originalPrice * (100 - discountPercent) / 100);
+            const rating = (Math.random() * (0.5) + 4.4).toFixed(1); // 4.4 to 4.9
+            
+            // ----------------------------------------------------------------------
+            // USER REQUESTED CHANGE: Product ID is now the sequential number '1', '2', ... '30'
+            const productId = i.toString(); 
+            // ----------------------------------------------------------------------
+
+            return {
+                id: productId, // Sequential ID: '1', '2', '3', ...
+                name: `[${category}] Product ${i} - ${PRODUCT_NAMES[nameIndex]}`, 
+                category: category,
+                price: price,
+                originalPrice: originalPrice,
+                discountPercent: discountPercent,
+                description: `This is the detailed description for Product **${i}** (ID: ${productId}), a high-quality item under the **${category}** category. This product has **20** unique customer reviews (COS${((i-1)*20)+1} to COS${i*20}). You can easily change this description.`,
+                rating: parseFloat(rating),
+                reviews: 500 + (i * 50),
+                // --- 5 PRODUCT IMAGES ---
+                imageUrls: [
+                    `https://placehold.co/400x400/AD1457/ffffff?text=P${i}+Main`,
+                    `https://placehold.co/400x400/F06292/ffffff?text=P${i}+Side`,
+                    `https://placehold.co/400x400/C2185B/ffffff?text=P${i}+Angle`,
+                    `https://placehold.co/400x400/880E4F/ffffff?text=P${i}+Usage`,
+                    `https://placehold.co/400x400/E91E63/ffffff?text=P${i}+Detail`,
+                ],
+                // --- 20 BUYER REVIEWS (Each product gets a sequential set of 20 customers) ---
+                buyerPhotos: generateBuyerReviews(productId, i), // Pass sequential index 'i' (1 to 30)
+            };
+        };
+
+
+        // ====================================================================================================
+        // --- PRODUCT DATA INITIALIZATION (தயாரிப்பு தரவு இங்கே தெளிவாக 1 முதல் 30 வரை பிரிக்கப்பட்டுள்ளது) ---
+        // ====================================================================================================
+
+        const products = Array.from({ length: 30 }, (_, i) => createSingleProduct(i + 1));
+        
+        // Example structure for clarity:
+        /*
+        const products = [
+            createSingleProduct(1), // Product ID '1'
+            createSingleProduct(2), // Product ID '2'
+            // ...
+            createSingleProduct(30) // Product ID '30'
+        ];
+        */
+
+
+        // --- AUTH & FIREBASE INITIALIZATION ---
+        let db, auth;
+        let userId = null; 
+
+        async function initializeFirebase() {
+             if (!firebaseConfig) {
+                console.log("Firebase config not available. Skipping Firebase initialization.");
+                return;
+            }
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                setLogLevel('Debug');
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User signed in. UID:", userId);
+                    } else {
+                        userId = null;
+                        console.log("User signed out or failed to sign in.");
+                    }
+                    render(); 
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+            }
+        }
+
+        // --- CART FUNCTIONS ---
+
+        const addToCart = (productId, quantity = 1) => {
+            const id = productId; 
+            const product = products.find(p => p.id === id);
+            
+            if (!product) {
+                console.error("Product not found with ID:", id);
+                return;
+            }
+            
+            const qty = parseInt(quantity, 10);
+            if (qty < 1 || qty > 5 || isNaN(qty)) {
+                 showToast('Quantity must be between 1 and 5.');
+                 return;
+            }
+
+            const existingItem = cart.find(item => item.productId === id); 
+            if (existingItem) {
+                if (existingItem.quantity + qty > 5) {
+                    showToast(`You can only add up to 5 units of ${product.name}.`);
+                    return;
+                }
+                existingItem.quantity += qty;
+            } else {
+                cart.push({
+                    productId: id, 
+                    quantity: qty,
+                    price: product.price,
+                    name: product.name,
+                    image: product.imageUrls[0]
+                });
+            }
+            showToast(`${qty} item(s) of **${product.name.substring(0, 20)}...** added to cart successfully!`);
+            updateCartIcon();
+            render();
+        };
+        
+        const updateCartQuantity = (productId, newQuantity) => {
+            const id = productId;
+            const item = cart.find(item => item.productId === id); 
+            if (item) {
+                let qty = parseInt(newQuantity);
+                if (isNaN(qty)) qty = 1;
+                
+                if (qty > 0 && qty <= 5) {
+                    item.quantity = qty;
+                } else if (qty === 0) {
+                    cart = cart.filter(item => item.productId !== id);
+                    showToast('Item removed from cart.');
+                } else if (qty > 5) {
+                    item.quantity = 5;
+                    showToast('Maximum quantity limit is 5.');
+                }
+            }
+            updateCartIcon();
+            render();
+        };
+
+        const getCartTotal = () => {
+            return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+        };
+
+        const updateCartIcon = () => {
+            const totalQuantity = cart.reduce((total, item) => total + item.quantity, 0);
+            const cartIcon = document.getElementById('cart-icon-badge');
+            if (cartIcon) {
+                cartIcon.textContent = totalQuantity;
+                cartIcon.classList.toggle('hidden', totalQuantity === 0);
+            }
+        };
+
+        // --- NAVIGATION / VIEW MANAGEMENT ---
+
+        const setView = (newView, productId = null) => {
+            view = newView;
+            selectedProductId = productId;
+            showAllBuyerPhotos = false; // Reset buyer photo state when view changes
+            selectedQuantity = 1; 
+            render();
+        };
+        
+        const setCategory = (category) => {
+            currentCategory = category;
+            setView('list'); 
+        };
+
+        const checkCartAndSetView = (newView) => {
+            if (cart.length === 0 && (newView === 'cart' || newView === 'shipping')) {
+                 showToast('Your cart is empty. Add items to proceed.');
+            } else {
+                setView(newView);
+            }
+        };
+        
+        const goBack = () => {
+             if (view === 'detail') setView('list');
+             else if (view === 'cart') setView('list'); 
+             else if (view === 'shipping') setView('cart'); 
+             else if (view === 'confirmation') setView('list');
+             else setView('list'); // Default back to list
+        };
+
+        // --- MODAL HANDLING (Buyer Photos) ---
+
+        const openBuyerPhotoModal = (productId, photoId) => {
+            // Find product by its sequential ID (e.g., '1', '2', '3')
+            const product = products.find(p => p.id === productId); 
+            const photo = product?.buyerPhotos.find(p => p.id === photoId); 
+
+            if (!photo) return;
+
+            const modalContent = document.getElementById('modal-content');
+            modalContent.innerHTML = `
+                <div class="flex justify-end">
+                    <button onclick="closeBuyerPhotoModal()" class="text-gray-500 hover:text-gray-800">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                <!-- Customer Photo-vil Buyer Photo-vin imageUrl-ai kaattavum -->
+                <img src="${photo.customerAvatar.replace('100x100', '500x500')}" alt="Customer Photo" onerror="this.onerror=null;this.src='https://placehold.co/500x500/A0AEC0/ffffff?text=Image+Error'" class="w-full h-auto rounded-xl object-cover mb-4 shadow-lg"/>
+                <div class="p-2">
+                    <div class="flex items-center mb-2">
+                        <!-- Customer Avatar-ai display seyyavum -->
+                        <img src="${photo.customerAvatar}" alt="${photo.customerName}" class="w-10 h-10 rounded-full mr-3 border border-gray-200"/>
+                        <div>
+                            <p class="font-semibold text-gray-900">${photo.customerName}</p>
+                            ${renderStars(photo.rating)}
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-700 mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">${photo.comment}</p>
+                </div>
+            `;
+            // Initialize lucide icons for modal stars
+            lucide.createIcons();
+
+            const modal = document.getElementById('buyer-photo-modal');
+            modal.classList.remove('hidden', 'opacity-0');
+            modal.classList.add('opacity-100');
+            // Animate container
+            modal.querySelector('.modal-container').classList.remove('hidden');
+        };
+
+        const closeBuyerPhotoModal = () => {
+            const modal = document.getElementById('buyer-photo-modal');
+            modal.classList.add('opacity-0');
+            modal.querySelector('.modal-container').classList.add('hidden');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300); // Wait for transition
+        };
+
+        // Function to toggle show all photos state
+        const toggleShowAllBuyerPhotos = () => {
+            showAllBuyerPhotos = !showAllBuyerPhotos;
+            render();
+        };
+
+        // --- TOAST/ALERT MESSAGE ---
+        const showToast = (message) => {
+            let toast = document.getElementById('custom-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'custom-toast';
+                toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-xl text-sm transition-opacity duration-300 opacity-0 z-50';
+                document.body.appendChild(toast);
+            }
+            toast.innerHTML = message; // Use innerHTML for potential bolding/formatting
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 3000); // 3 seconds visibility
+        };
+
+
+        // --- RENDERING VIEWS ---
+
+        const renderHeader = (title, showBack = false) => {
+            return `
+                <div class="flex items-center justify-between p-4 bg-white shadow-md z-20 w-full">
+                    <div class="flex items-center">
+                        ${showBack ? `<button onclick="goBack()" class="mr-3 text-gray-600 hover:text-primary"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>` : ''}
+                        <h1 class="text-2xl font-extrabold text-gray-900">${title}</h1>
+                    </div>
+                    <button onclick="checkCartAndSetView('cart')" class="relative text-gray-600 hover:text-primary">
+                        <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+                        <span id="cart-icon-badge" class="absolute -top-2 -right-2 text-xs bg-red-600 text-white rounded-full h-4 w-4 flex items-center justify-center ${cart.length === 0 ? 'hidden' : ''}">${cart.reduce((total, item) => total + item.quantity, 0)}</span>
+                    </button>
+                </div>
+            `;
+        };
+
+        // Product List Content
+        const renderProductListContent = () => {
+            const filteredProducts = products.filter(p => p.category === currentCategory);
+            
+            const categoriesHtml = CATEGORIES.map(cat => `
+                <button onclick="setCategory('${cat}')" 
+                        class="px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap transition-all duration-200 
+                               ${currentCategory === cat ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-200 border border-gray-300'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            const productCards = filteredProducts.map(product => {
+                const discountPercent = product.discountPercent; 
+                const rating = product.rating.toFixed(1);
+
+                return `
+                    <!-- Single Product Card -->
+                    <div onclick="setView('detail', '${product.id}')" 
+                         class="bg-white w-full border border-gray-200 cursor-pointer p-0 
+                                transition-shadow duration-200 hover:shadow-lg focus:shadow-xl 
+                                rounded-xl overflow-hidden">
+                        
+                        <!-- Image Section -->
+                        <div class="relative">
+                            <img src="${product.imageUrls[0]}" alt="${product.name}" 
+                                 onerror="this.onerror=null;this.src='https://placehold.co/400x400/AD1457/ffffff?text=Image+Error'" 
+                                 class="w-full h-40 object-cover rounded-t-xl"/>
+                            
+                            <!-- Discount Badge -->
+                            <span class="absolute top-2 left-0 bg-green-600 text-white text-xs font-bold px-2 py-0.5 rounded-r-lg shadow-md">
+                                ${discountPercent}% OFF
+                            </span>
+                            
+                            <!-- Rating Badge -->
+                            <span class="absolute top-2 right-2 bg-white text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center shadow-md border border-gray-200">
+                                ${rating} <i data-lucide="star" class="w-3 h-3 ml-1 fill-yellow-500 text-yellow-500"></i>
+                            </span>
+                        </div>
+                        
+                        <!-- Info Section -->
+                        <div class="p-3 flex flex-col justify-between">
+                            <!-- Product Name -->
+                            <h3 class="font-medium text-sm text-gray-800 line-clamp-2">${product.name}</h3>
+                            
+                            <!-- Price Display -->
+                            <div class="flex items-end mt-1 space-x-2">
+                                <p class="text-xl font-extrabold text-primary">${formatPrice(product.price)}</p>
+                                <span class="text-xs text-gray-500 line-through">${formatPrice(product.originalPrice)}</span>
+                            </div>
+
+                            <!-- Discount Percentage and Free Delivery -->
+                            <div class="flex items-center justify-between mt-1">
+                                <span class="text-xs font-semibold text-green-600">You Save ${discountPercent}%</span>
+                                <p class="text-xs text-gray-500 flex items-center">
+                                    <i data-lucide="truck" class="w-3 h-3 mr-1"></i> Free Delivery
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <!-- Category Tab Bar (Sticky to top) -->
+                <div class="sticky top-0 bg-f0f2f5 p-3 z-10 border-b border-gray-200 shadow-sm">
+                    <div class="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+                        ${categoriesHtml}
+                    </div>
+                </div>
+
+                <!-- Product List Container - 2 Column Grid -->
+                <div class="grid grid-cols-2 gap-3 p-3">
+                    ${productCards.length > 0 ? productCards : 
+                        `<div class="col-span-2 p-8 text-center text-gray-500 bg-white rounded-xl shadow-lg">
+                            <i data-lucide="package-search" class="w-12 h-12 mx-auto mb-4 text-gray-400"></i>
+                            <p class="text-lg font-semibold">No products found in the **${currentCategory}** category.</p>
+                            <p class="text-sm mt-2">Please select another category above.</p>
+                        </div>`}
+                </div>
+            `;
+        };
+
+        const renderProductDetailContent = () => {
+            // Find product using the sequential ID (e.g., '1', '2', '3')
+            const product = products.find(p => p.id === selectedProductId); 
+            if (!product) return renderLoading();
+
+            const mainImageId = 'main-product-image';
+            // 5 product images-i thumbnail-kalukkaaga payanpaduthavum
+            const thumbnailsHtml = product.imageUrls.map((url, index) => `
+                <img src="${url}" alt="Thumbnail ${index + 1}" 
+                     onclick="document.getElementById('${mainImageId}').src='${url}'"
+                     onerror="this.onerror=null;this.src='https://placehold.co/100x100/A0AEC0/ffffff?text=T${index+1}'"
+                     class="w-full h-16 object-cover rounded-lg border border-gray-300 cursor-pointer hover:border-primary transition duration-200">
+            `).join('');
+            
+            // --- BUYER PHOTOS SECTION LOGIC ---
+            // 20 buyer photos-i payanpaduthavum. ஆரம்பத்தில் 8 புகைப்படங்களைக் காட்டவும்.
+            const initialDisplayCount = 8;
+            const totalPhotos = product.buyerPhotos.length; // Will be 20
+            
+            const displayedPhotos = showAllBuyerPhotos ? product.buyerPhotos : product.buyerPhotos.slice(0, initialDisplayCount);
+            const remainingPhotosCount = totalPhotos - initialDisplayCount;
+
+            const buyerPhotosHtml = displayedPhotos.map(photo => `
+                <img src="${photo.customerAvatar.replace('100x100', '150x150')}" alt="Buyer Photo ${photo.customerName}" 
+                     onclick="openBuyerPhotoModal('${product.id}', '${photo.id}')"
+                     onerror="this.onerror=null;this.src='https://placehold.co/150x150/A0AEC0/ffffff?text=B${photo.customerName}'"
+                     class="w-full h-20 object-cover rounded-lg cursor-pointer transition-transform duration-200 hover:scale-105 shadow-md">
+            `).join('');
+            
+            const showMoreButtonHtml = remainingPhotosCount > 0 && !showAllBuyerPhotos ? `
+                <button onclick="toggleShowAllBuyerPhotos()" 
+                        class="w-full h-20 bg-gray-100 text-primary font-bold rounded-lg border-2 border-dashed border-primary/50 flex flex-col items-center justify-center transition duration-200 hover:bg-gray-200">
+                    <i data-lucide="plus-circle" class="w-6 h-6 mb-1"></i>
+                    <span class="text-sm">+${remainingPhotosCount} More Photos</span>
+                </button>
+            ` : '';
+            
+            const hideButtonHtml = showAllBuyerPhotos ? `
+                <button onclick="toggleShowAllBuyerPhotos()" 
+                        class="w-full mt-4 bg-gray-200 text-gray-700 font-semibold py-2 rounded-full transition duration-200 hover:bg-gray-300">
+                    Hide Photos
+                </button>
+            ` : '';
+
+            // --- CUSTOMER REVIEWS SECTION ---
+            // 20 buyer photos-i payanpaduthavum
+            const customerReviewsHtml = product.buyerPhotos.map(photo => `
+                <div class="bg-white p-4 rounded-xl shadow-md border-t-4 border-primary/50 mb-4">
+                    <div class="flex items-start mb-3">
+                        <!-- Customer Avatar-ai display seyyavum -->
+                        <img src="${photo.customerAvatar}" alt="${photo.customerName}" class="w-12 h-12 rounded-full mr-4 border-2 border-primary/30"/>
+                        <div>
+                            <p class="font-bold text-lg text-gray-900">${photo.customerName}</p>
+                            ${renderStars(photo.rating)}
+                            <p class="text-sm text-gray-500 mt-1">Review ID: ${photo.id.split('_')[1]}</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-700 italic border-l-4 border-gray-200 pl-3 leading-relaxed">${photo.comment}</p>
+                </div>
+            `).join('');
+            
+            // Quantity Tabs HTML
+            const quantityTabsHtml = Array.from({ length: 5 }, (_, i) => i + 1).map(qty => `
+                <button onclick="setSelectedQuantity(${qty})" 
+                        class="w-10 h-10 border rounded-lg font-bold text-lg transition-all duration-200 
+                               ${selectedQuantity === qty ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'}">
+                    ${qty}
+                </button>
+            `).join('');
+
+            return `
+                <div class="view-content pb-20">
+                    <!-- Image Gallery -->
+                    <div class="bg-white shadow-xl">
+                        <!-- Main Image -->
+                        <img id="${mainImageId}" src="${product.imageUrls[0]}" alt="${product.name}" 
+                             onerror="this.onerror=null;this.src='https://placehold.co/400x400/AD1457/ffffff?text=Image+Error'"
+                             class="w-full h-96 object-cover transition-opacity duration-300"/>
+                        <div class="p-4 grid grid-cols-5 gap-2 bg-gray-50 border-t border-gray-200">
+                            ${thumbnailsHtml}
+                        </div>
+                    </div>
+
+                    <!-- Product Info -->
+                    <div class="p-4 bg-white mt-4 rounded-xl shadow-lg mx-3">
+                        <h2 class="text-2xl font-bold text-gray-900">${product.name}</h2>
+                        
+                        <!-- Product ID Display - For user confirmation -->
+                        <p class="text-xs text-gray-500 mt-1 mb-3 border-b pb-2">Unique Product ID: <span class="font-mono font-semibold text-primary text-base">${product.id}</span></p>
+
+                        <!-- Category Tag -->
+                        <span class="inline-block bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full mt-2">${product.category}</span>
+
+                        <!-- Quantity Tabs -->
+                        <div class="mt-4 pb-4 border-b border-gray-200">
+                            <span class="font-semibold text-gray-800 mb-2 block">Select Quantity (Max 5):</span>
+                            <div id="product-quantity-tabs" class="flex space-x-3">
+                                ${quantityTabsHtml}
+                            </div>
+                        </div>
+
+                        <!-- Price/Offer Display -->
+                        <div class="mt-4 flex items-center justify-between">
+                            <!-- Offer Price Display -->
+                            <div class="flex flex-col items-start">
+                                <span class="text-sm text-gray-500 line-through">${formatPrice(product.originalPrice)}</span>
+                                <p class="text-3xl font-extrabold text-primary">${formatPrice(product.price)}</p>
+                                <span class="text-xs font-semibold text-green-600 mt-1">${product.discountPercent}% OFFER Applied!</span>
+                            </div>
+                            
+                            <!-- Rating -->
+                            <div class="flex flex-col items-end">
+                                <div class="flex items-center text-base">
+                                    ${renderStars(product.rating.toFixed(1))}
+                                </div>
+                                <span class="text-gray-600 ml-2">(${product.reviews} Reviews)</span>
+                            </div>
+                        </div>
+                        
+                        
+                        <p class="text-gray-700 mt-4">${product.description}</p>
+                        
+                        <!-- Shipping Cost Free Label -->
+                        <div class="mt-4 flex items-center bg-green-50 p-3 rounded-lg border border-green-200">
+                            <i data-lucide="truck" class="w-5 h-5 text-green-700 mr-3"></i>
+                            <span class="font-bold text-green-700">Shipping Cost: FREE</span>
+                            <span class="text-sm text-green-600 ml-2">(All over India)</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Buyers Share Photo Section -->
+                    <div class="p-4 mt-4 bg-white rounded-xl shadow-lg mx-3">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Buyers Share Photo (${totalPhotos} Photos - COS${product.buyerPhotos[0].id.split('_')[1]} to COS${product.buyerPhotos[totalPhotos - 1].id.split('_')[1]})</h3>
+                        <div class="grid buyer-photo-grid gap-2">
+                            ${buyerPhotosHtml}
+                            ${showMoreButtonHtml}
+                        </div>
+                        ${hideButtonHtml}
+                    </div>
+                    
+                    <!-- CUSTOMER REVIEWS Section -->
+                    <div class="p-4 mt-4 mx-3">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Customer Reviews (${totalPhotos} Verified Buyers)</h3>
+                        ${customerReviewsHtml}
+                    </div>
+
+                </div>
+                
+                <!-- Fixed Footer/Add to Cart Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 flex justify-between items-center z-10">
+                    <div class="flex flex-col">
+                        <span class="text-sm text-gray-500">Total Price:</span>
+                        <span class="text-xl font-bold text-primary">${formatPrice(product.price * selectedQuantity)}</span>
+                    </div>
+                    <button id="add-to-cart-btn"
+                            data-product-id="${product.id}"
+                            class="bg-primary text-white font-bold py-3 px-6 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center">
+                        <i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>
+                        Add to Cart
+                    </button>
+                </div>
+            `;
+        };
+        
+        const renderCartContent = () => {
+            if (cart.length === 0) {
+                return `
+                    <div class="p-8 text-center bg-white m-4 rounded-xl shadow-lg">
+                        <i data-lucide="shopping-cart" class="w-16 h-16 text-gray-400 mx-auto mb-4"></i>
+                        <p class="text-xl font-semibold text-gray-700 mb-4">Your Cart is Empty</p>
+                        <p class="text-gray-500 mb-6">Explore our beautiful collection and add items to your cart.</p>
+                        <button onclick="setView('list')" class="bg-primary text-white font-bold py-3 px-6 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/50">
+                            Start Shopping
+                        </button>
+                    </div>
+                `;
+            }
+
+            const cartItemsHtml = cart.map(item => {
+                const product = products.find(p => p.id === item.productId);
+                return `
+                    <!-- Cart Item Card -->
+                    <div class="flex bg-white p-4 rounded-xl shadow-lg mb-4 border border-gray-100">
+                        <!-- Image and Product Info Container -->
+                        <div class="flex flex-grow items-start">
+                            <img src="${item.image}" alt="${item.name}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/AD1457/ffffff?text=Image'" class="w-20 h-20 object-cover rounded-lg mr-4 border border-gray-200"/>
+                            
+                            <div class="flex-grow">
+                                <h3 class="font-semibold text-gray-800 line-clamp-2">${item.name}</h3>
+                                <p class="text-sm text-gray-500 mt-1">Unit Price (Offer): ${formatPrice(item.price)}</p>
+                                <p class="text-primary text-xl font-bold mt-2">${formatPrice(item.price * item.quantity)}</p>
+
+                                <!-- Quantity Control -->
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <button onclick="updateCartQuantity('${item.productId}', ${item.quantity - 1})" class="text-gray-600 hover:text-red-600 p-1 border border-gray-300 bg-gray-50 rounded-lg transition duration-150 h-8 w-8 flex items-center justify-center">
+                                        <i data-lucide="minus" class="w-4 h-4"></i>
+                                    </button>
+                                    
+                                    <!-- Min 1, Max 5 for quantity -->
+                                    <input type="number" min="1" max="5" value="${item.quantity}" onchange="updateCartQuantity('${item.productId}', this.value)" 
+                                           class="w-12 text-center border border-gray-300 rounded-lg p-1 text-sm font-semibold focus:ring-primary focus:border-primary h-8"/>
+                                           
+                                    <button onclick="updateCartQuantity('${item.productId}', ${item.quantity + 1})" class="text-gray-600 hover:text-green-600 p-1 border border-gray-300 bg-gray-50 rounded-lg transition duration-150 h-8 w-8 flex items-center justify-center">
+                                        <i data-lucide="plus" class="w-4 h-4"></i>
+                                    </button>
+                                    
+                                    <!-- Remove Button -->
+                                    <button onclick="updateCartQuantity('${item.productId}', 0)" class="ml-4 text-red-500 hover:text-red-700 p-1 transition duration-150" title="Remove Item">
+                                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const total = getCartTotal();
+
+            return `
+                <div class="view-content p-4 pb-28">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Your Shopping Cart (${cart.length} Items)</h2>
+                    ${cartItemsHtml}
+                    
+                    <div class="mt-6 p-4 bg-white rounded-xl shadow-lg border border-primary/20">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">Order Summary</h3>
+                        <div class="flex justify-between text-gray-600 py-1">
+                            <span>Subtotal:</span>
+                            <span>${formatPrice(total)}</span>
+                        </div>
+                        <!-- Free Shipping is explicitly mentioned -->
+                        <div class="flex justify-between text-gray-600 py-1">
+                            <span>Shipping (Standard):</span>
+                            <span class="font-bold text-green-600">FREE</span>
+                        </div>
+                        <div class="flex justify-between text-lg font-bold text-gray-900 border-t border-dashed mt-3 pt-3">
+                            <span>Grand Total:</span>
+                            <span class="text-primary">${formatPrice(total)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Fixed Footer/Checkout Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 z-10">
+                    <button onclick="checkCartAndSetView('shipping')" class="w-full bg-primary text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center justify-center">
+                        <i data-lucide="package" class="w-5 h-5 mr-2"></i>
+                        Proceed to Checkout (${formatPrice(total)})
+                    </button>
+                </div>
+            `;
+        };
+
+        const renderShippingContent = () => {
+            const total = getCartTotal();
+
+            return `
+                <div class="view-content p-4 pb-28">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">Shipping & Payment</h2>
+
+                    <div class="p-4 bg-white rounded-xl shadow-lg mb-6 border border-primary/20">
+                         <h3 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Shipping Address</h3>
+                         <form id="shipping-form" onsubmit="handleOrderConfirmation(event)" class="space-y-4">
+                            <input type="text" id="name" placeholder="Full Name (eg: Janani B)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <input type="email" id="email" placeholder="Email (eg: janani@example.com)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <textarea id="address" placeholder="Shipping Address (Door No, Street)" rows="3" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"></textarea>
+                            <input type="text" id="pincode" placeholder="Pincode (eg: 600001)" required pattern="[0-9]{6}" title="6 digit pincode" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <!-- State and District fields -->
+                            <input type="text" id="district" placeholder="District (eg: Chennai)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <input type="text" id="state" placeholder="State (eg: Tamil Nadu)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            
+                            <h3 class="text-xl font-semibold text-gray-800 mt-6 mb-4 border-b pb-2">Payment Method</h3>
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="radio" name="payment" value="cod" checked class="text-primary focus:ring-primary"/>
+                                    <span class="text-gray-700 font-medium">Cash on Delivery (COD)</span>
+                                </label>
+                                <p class="text-sm text-gray-500 ml-7 mt-1">Pay when you receive the product.</p>
+                            </div>
+                            <!-- Other payment methods could be added here -->
+
+                            <div class="text-right mt-6">
+                                <p class="text-2xl font-bold text-primary">Pay: ${formatPrice(total)}</p>
+                            </div>
+                            
+                            <!-- Submit Button in Fixed Footer -->
+                         </form>
+                    </div>
+                </div>
+                
+                <!-- Fixed Footer/Place Order Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 z-10">
+                    <button type="submit" form="shipping-form" class="w-full bg-primary text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center justify-center">
+                        <i data-lucide="check-circle" class="w-5 h-5 mr-2"></i>
+                        Place Order
+                    </button>
+                </div>
+            `;
+        };
+
+        const handleOrderConfirmation = (event) => {
+            event.preventDefault();
+
+            // Form data retrieval
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const address = document.getElementById('address').value;
+            const pincode = document.getElementById('pincode').value;
+            const district = document.getElementById('district').value;
+            const state = document.getElementById('state').value;
+
+            if (!name || !email || !address || !pincode || !district || !state) {
+                showToast('Please fill out all required fields, including District and State.');
+                return;
+            }
+
+            // Show loading modal immediately
+            const loadingModal = document.getElementById('loading-modal');
+            loadingModal.classList.remove('hidden', 'opacity-0');
+            loadingModal.classList.add('opacity-100');
+
+
+            // 3 second delay (3000ms) for order processing
+            setTimeout(() => {
+                // Generate 10-digit random Order ID
+                const randomDigits = generateRandomId(10);
+                const orderId = 'ZOYA' + randomDigits;
+
+                // Confirmation data
+                const customerDetails = {
+                    name,
+                    email,
+                    address,
+                    pincode,
+                    district,
+                    state,
+                    orderId: orderId,
+                    totalItems: cart.reduce((total, item) => total + item.quantity, 0),
+                    totalPrice: getCartTotal(),
+                };
+
+                // Clear the cart after successful order
+                cart = [];
+                updateCartIcon();
+                
+                // Store details temporarily for confirmation page
+                sessionStorage.setItem('orderDetails', JSON.stringify(customerDetails));
+
+                // Hide loading modal
+                loadingModal.classList.add('opacity-0');
+                setTimeout(() => {
+                    loadingModal.classList.add('hidden');
+                    // Navigate to confirmation view
+                    setView('confirmation');
+                }, 300); // Wait for fade-out transition
+
+            }, 3000); // 3 seconds delay
+        };
+
+        const renderConfirmationContent = () => {
+             const customerDetails = JSON.parse(sessionStorage.getItem('orderDetails') || '{}');
+             const { name, address, pincode, email, state, district } = customerDetails;
+
+             return `
+                <div class="p-4 flex flex-col items-center justify-center h-full text-center">
+                    <i data-lucide="heart-handshake" class="w-24 h-24 text-primary mx-auto mb-6"></i>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Order Successfully Confirmed!</h1>
+                    <p class="text-xl font-extrabold text-primary bg-primary/10 p-3 rounded-xl border border-primary/30 mb-6 shadow-md">
+                        Order ID: ${customerDetails.orderId || 'N/A'}
+                    </p>
+                    <p class="text-lg text-gray-600 mb-8">Thank you for shopping with ${APP_NAME}. Your order will be delivered soon.</p>
+                    <div class="bg-green-50 p-4 rounded-xl mb-8 w-full max-w-xs shadow-inner border border-green-300">
+                         <p class="font-semibold text-green-700">Delivery Address:</p>
+                         <p class="text-sm text-green-600 mt-1">${name}</p>
+                         <p class="text-sm text-green-600">${address}, Pincode: ${pincode}</p>
+                         <!-- State and District in Confirmation -->
+                         <p class="text-sm text-green-600">${district}, ${state}</p>
+                         <p class="text-sm text-green-600 mt-1 font-medium">Email: ${email}</p>
+                    </div>
+                    <button onclick="setView('list')" class="bg-primary text-white text-lg font-bold py-3 px-10 rounded-xl transition-all duration-300 hover:opacity-90 shadow-lg shadow-primary/50">
+                        Continue Shopping
+                    </button>
+                    <!-- Changed this button to use setView('list') to avoid an issue, as order history is demo -->
+                    <button onclick="setView('list')" class="mt-4 text-primary font-semibold hover:underline">
+                        View Order History (Demo)
+                    </button>
+                </div>
+            `;
+        };
+        
+        // --- NEW FUNCTION: ATTACH EVENT LISTENERS AFTER RENDER ---
+        const attachDetailListeners = () => {
+            if (view === 'detail') {
+                const btn = document.getElementById('add-to-cart-btn');
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        const productId = btn.dataset.productId;
+                        // selectedQuantity is globally updated by setSelectedQuantity()
+                        addToCart(productId, selectedQuantity);
+                    });
+                    console.log(`Event listener attached to product ${selectedProductId} 'Add to Cart' button.`);
+                }
+            }
+        };
+
+
+        // --- MAIN RENDER FUNCTION ---
+        const render = () => {
+            const app = document.getElementById('app');
+            let content = '';
+            let headerTitle = APP_NAME;
+            let showBack = false;
+
+            if (view === 'list') {
+                content = renderProductListContent();
+                headerTitle = APP_NAME; 
+            } else if (view === 'detail') {
+                content = renderProductDetailContent();
+                headerTitle = 'Product Details';
+                showBack = true;
+            } else if (view === 'cart') {
+                content = renderCartContent();
+                headerTitle = 'My Cart';
+                showBack = true;
+            } else if (view === 'shipping') {
+                 content = renderShippingContent();
+                 headerTitle = 'Checkout';
+                 showBack = true;
+            } else if (view === 'confirmation') {
+                 content = renderConfirmationContent();
+                 headerTitle = 'Order Confirmed';
+            } else {
+                content = renderLoading(); // Default or error state
+            }
+            
+            // Final DOM update
+            const headerHtml = renderHeader(headerTitle, showBack);
+            app.innerHTML = headerHtml + `<div class="view-content" id="view-content">${content}</div>`;
+
+            // Lucide icons-i re-initialize seyyavum (new content-kaaga)
+            lucide.createIcons();
+            updateCartIcon();
+            
+            // *** IMPORTANT: Attach listeners after rendering the content ***
+            attachDetailListeners(); 
+        };
+
+        // --- GLOBAL EXPORTS (Crucial for HTML onclick to work) ---
+        window.setView = setView;
+        window.setCategory = setCategory; 
+        window.goBack = goBack;
+        window.checkCartAndSetView = checkCartAndSetView;
+        window.addToCart = addToCart;
+        window.updateCartQuantity = updateCartQuantity;
+        window.openBuyerPhotoModal = openBuyerPhotoModal;
+        window.closeBuyerPhotoModal = closeBuyerPhotoModal;
+        window.toggleShowAllBuyerPhotos = toggleShowAllBuyerPhotos;
+        window.setSelectedQuantity = setSelectedQuantity;
+        window.handleOrderConfirmation = handleOrderConfirmation;
+        window.formatPrice = formatPrice; 
+
+        // --- AARAMBAM ---
+        window.onload = function () {
+            initializeFirebase();
+            render(); 
+        }
+
+    </script>
+</body>
+</html>
+<!-- 
+    ========================================================================================================
+    SHOPZOYA E-COMMERCE - SINGLE FILE HTML/TAILWIND/JS APP 
+    (UPDATED: Product ID is now the sequential number 1 through 30, as requested)
+    ========================================================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShopZoya - E-commerce Ordering Workflow</title>
+    <!-- Tailwind CSS-i load seyyavum -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Azhagana icon-kalukkaga Lucide Icons-i load seyyavum -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Theme Colors */
+        :root {
+            --primary: #aa168c;
+            --secondary: #9000a8;
+        }
+
+        .custom-pink-purple { background-color: var(--primary); }
+        .custom-pink-purple-text { color: var(--primary); }
+        .custom-pink-purple-border { border-color: var(--primary); }
+        .bg-primary { background-color: var(--primary); }
+        .text-primary { color: var(--primary); }
+        .hover\:bg-secondary:hover { background-color: var(--secondary); }
+        
+        /* Mobile simulation-kaana App Container */
+        .app-container {
+            max-width: 480px;
+            height: 100vh;
+            margin: 0 auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden; /* Views-kulle content scroll aagum */
+            display: flex;
+            flex-direction: column;
+            background-color: #f0f2f5;
+            position: relative; 
+        }
+        
+        /* Views-kku ullirukkum scrollable content */
+        .view-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-bottom: 80px; 
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+        .view-content::-webkit-scrollbar {
+            display: none; /* Chrome, Safari and Opera */
+        }
+
+        /* Modal Backdrop Style */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.7);
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-container {
+            transition: transform 0.3s ease-in-out;
+        }
+        .modal-container.hidden {
+            transform: translateY(100%);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border-top-color: var(--primary);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Buyer Photo Grid-i sariyaana alavil kaatta */
+        .buyer-photo-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)); /* 4 columns for mobile */
+        }
+        
+        /* Custom Scrollbar hide for category tabs */
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;  /* Chrome, Safari, Opera*/
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div id="app" class="app-container">
+        <!-- Content will be rendered here by JavaScript -->
+    </div>
+
+    <!-- Product Image Modal (For Buyer Photos) -->
+    <div id="buyer-photo-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop hidden opacity-0" onclick="closeBuyerPhotoModal()">
+        <div class="bg-white rounded-2xl shadow-2xl p-4 w-11/12 max-w-sm m-4 modal-container transition-transform duration-300" onclick="event.stopPropagation()">
+            <div id="modal-content">
+                <!-- Modal content (image, review details) will be inserted here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Modal for 3-second delay -->
+    <div id="loading-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 hidden transition-opacity duration-300 opacity-0">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center flex flex-col items-center">
+            <div class="spinner w-12 h-12 border-4 border-dashed rounded-full mb-4"></div>
+            <p class="text-xl font-semibold text-gray-800">Processing Your Order...</p>
+            <p class="text-sm text-gray-500 mt-1">Please wait 3 seconds for confirmation.</p>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // --- GLOBAL VARIABLES ---
+        const APP_NAME = "ShopZoya"; 
+        const CATEGORIES = ['Fashion', 'Electronics', 'Home Decor', 'Kitchenware', 'Books']; 
+        let view = 'list'; 
+        let currentCategory = 'Fashion'; 
+        let selectedProductId = null; 
+        let cart = []; 
+        let selectedQuantity = 1; 
+
+        // Buyer photo display state-kku
+        let showAllBuyerPhotos = false;
+
+        // Firebase-kkaana global variables (canvas environment-la irundhu varum)
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- FIREBASE IMPORTS (Demo app, not actively used for data storage here) ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
+        // --- UTILITY FUNCTIONS ---
+
+        // Star icon-kalai render seyyavum
+        const renderStars = (rating) => {
+            const fullStar = '<i data-lucide="star" class="w-4 h-4 fill-yellow-500 text-yellow-500"></i>';
+            const emptyStar = '<i data-lucide="star" class="w-4 h-4 text-gray-300"></i>';
+            let stars = '';
+            for (let i = 0; i < 5; i++) {
+                stars += (i < rating) ? fullStar : emptyStar;
+            }
+            return `<div class="flex items-center space-x-0.5">${stars}</div>`;
+        };
+
+        // Price-i indian currency format-il format seyyavum
+        const formatPrice = (price) => {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                maximumFractionDigits: 0,
+            }).format(price);
+        };
+        
+        // 10 ilakkam random number-i generate seyyavum
+        const generateRandomId = (length) => {
+            let result = '';
+            const characters = '0123456789';
+            const charactersLength = characters.length;
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * charactersLength));
+            }
+            return result;
+        };
+        
+        // Loading state-i kaattavum
+        const renderLoading = () => {
+            return `
+                <div class="flex flex-col items-center justify-center h-full text-gray-500 p-8">
+                    <div class="spinner w-10 h-10 border-4 border-dashed rounded-full mb-4"></div>
+                    <p class="text-lg font-semibold">Loading...</p>
+                    <p class="text-sm">Please wait while the content loads.</p>
+                </div>
+            `;
+        };
+        
+        // Quantity tab selection-kku
+        const setSelectedQuantity = (qty) => {
+            selectedQuantity = qty;
+            if (view === 'detail') {
+                 render(); 
+                 attachDetailListeners(); 
+            }
+        };
+
+
+        // ====================================================================================================
+        // --- DYNAMIC PRODUCT DATA GENERATION (30 Products) ---
+        // ====================================================================================================
+
+        const PRODUCT_NAMES = [
+            "Premium Cotton Kurti", "Wireless Noise-Cancelling Headphones", "Bohemian Dream Catcher", 
+            "Non-Stick Wok Pan", "Classic Hardcover Novel", "Vintage Leather Wallet", 
+            "Gaming Mechanical Keyboard", "Handcrafted Wooden Clock", "Electric Kettle 1.8L",
+            "Yoga Mat 6mm Thick", "Digital Fitness Tracker", "Bamboo Desk Organizer"
+        ];
+        
+        // Static comments only for realism. Customer names are now COS1 to COS600.
+        const CUSTOMER_COMMENTS = [
+            "Sari romba alaga irukku! Quality nallaa irukku, delivery seekkirama vandhuchu. Highly recommended!",
+            "Idhu enaku romba pidichiruku. Neril paaka innum azhaga irukku. Nalla color combination. Expectation met!",
+            "Super product! Price-um reasonable. Next time vera color vaanganum nu irukken. Worth the money!",
+            "Ithoda material romba soft a irukku. Comfortable-a irukku. Thank you! Excellent for the price.",
+            "Oru chinna function-kku vaanginen. Ellarum nallaa irukku nu sonanga. Great buy.",
+            "Quick delivery and excellent service. Will definitely buy again from this store. Highly satisfied.",
+            "Expected-a vida nallaa irukku. Ippadi oru quality-a intha vilaiyil expect pannala. Five stars!",
+            "En Amma-vukku vaanginen. Avanga romba santhoshapattanga. Good gift choice.",
+            "The material is luxurious and the fit is perfect. Loved the vibrant hues. True to picture.",
+            "Bought this for a gift, and the recipient absolutely loved it. Highly recommended seller."
+        ];
+
+        /**
+         * 30 தயாரிப்புகளுக்கு, ஒவ்வொரு தயாரிப்புக்கும் 20 வாடிக்கையாளர் மதிப்புரைகளை உருவாக்கும்.
+         * வாடிக்கையாளர்கள் COS1, COS2, ... COS600 என்ற தனித்த வரிசைப்படி இருப்பார்கள்.
+         * @param {string} productId - தயாரிப்பின் தனிப்பட்ட ID.
+         * @param {number} productIndex - தயாரிப்பின் வரிசை எண் (1 முதல் 30 வரை).
+         */
+        const generateBuyerReviews = (productId, productIndex) => {
+            const reviews = [];
+            // 20 வெவ்வேறு வண்ணங்கள், 20 வாடிக்கையாளர்களைத் தனித்துக்காட்ட.
+            const avatarColors = ["AD1457", "4CAF50", "FF9800", "2196F3", "00BCD4", "FF5722", "607D8B", "9C27B0", "009688", "F44336", "FFC107", "8BC34A", "CDDC39", "FFEB3B", "795548", "9E9E9E", "673AB7", "3F51B5", "03A9F4", "009688"]; 
+            
+            // தயாரிப்பு வரிசை எண் i = 1 என்றால், வாடிக்கையாளர்கள் 1 முதல் 20 வரை (startIndex = 1)
+            // தயாரிப்பு வரிசை எண் i = 2 என்றால், வாடிக்கையாளர்கள் 21 முதல் 40 வரை (startIndex = 21)
+            const totalReviews = 20; 
+            const startIndex = ((productIndex - 1) * totalReviews) + 1; // 1, 21, 41, ... 581
+
+            for (let j = 0; j < totalReviews; j++) {
+                const globalCustomerIndex = startIndex + j; // COS index (1 to 600)
+                const customerName = `COS${globalCustomerIndex}`; 
+                
+                // Cycle through the available static comments for realism
+                const comment = CUSTOMER_COMMENTS[j % CUSTOMER_COMMENTS.length]; 
+                const rating = Math.floor(Math.random() * (5 - 4 + 1)) + 4; // 4 or 5 stars
+                
+                reviews.push({
+                    // Review ID now uses the global customer index
+                    id: `${productId}_C${globalCustomerIndex}`, 
+                    customerName: customerName,
+                    // Avatar uses the index and unique color
+                    customerAvatar: `https://placehold.co/100x100/${avatarColors[j % avatarColors.length]}/ffffff?text=C${globalCustomerIndex}`,
+                    rating: rating,
+                    comment: `[Product ${productIndex}, COS${globalCustomerIndex}] - ${comment}`, // Added context
+                });
+            }
+            return reviews;
+        };
+
+        /**
+         * Product index-ஐப் பயன்படுத்தி ஒரு தனிப்பட்ட தயாரிப்பு ஆப்ஜெக்ட்டை உருவாக்கும்.
+         * @param {number} i - தயாரிப்பு வரிசை எண் (1 முதல் 30 வரை).
+         */
+        const createSingleProduct = (i) => {
+            const categoryIndex = i % CATEGORIES.length;
+            const category = CATEGORIES[categoryIndex];
+            const nameIndex = i % PRODUCT_NAMES.length;
+            
+            // Unique Pricing/Details for each sequential product (1 to 30)
+            const basePrice = (categoryIndex === 0 ? 5000 : categoryIndex === 1 ? 25000 : categoryIndex === 2 ? 1500 : 3000) + (i * 100);
+            const originalPrice = basePrice + Math.floor(basePrice * 0.25); // 25% extra
+            const discountPercent = 20 + (i % 5); // 20% to 24% discount
+            const price = Math.round(originalPrice * (100 - discountPercent) / 100);
+            const rating = (Math.random() * (0.5) + 4.4).toFixed(1); // 4.4 to 4.9
+            
+            // ----------------------------------------------------------------------
+            // USER REQUESTED CHANGE: Product ID is now the sequential number '1', '2', ... '30'
+            const productId = i.toString(); 
+            // ----------------------------------------------------------------------
+
+            return {
+                id: productId, // Sequential ID: '1', '2', '3', ...
+                name: `[${category}] Product ${i} - ${PRODUCT_NAMES[nameIndex]}`, 
+                category: category,
+                price: price,
+                originalPrice: originalPrice,
+                discountPercent: discountPercent,
+                description: `This is the detailed description for Product **${i}** (ID: ${productId}), a high-quality item under the **${category}** category. This product has **20** unique customer reviews (COS${((i-1)*20)+1} to COS${i*20}). You can easily change this description.`,
+                rating: parseFloat(rating),
+                reviews: 500 + (i * 50),
+                // --- 5 PRODUCT IMAGES ---
+                imageUrls: [
+                    `https://placehold.co/400x400/AD1457/ffffff?text=P${i}+Main`,
+                    `https://placehold.co/400x400/F06292/ffffff?text=P${i}+Side`,
+                    `https://placehold.co/400x400/C2185B/ffffff?text=P${i}+Angle`,
+                    `https://placehold.co/400x400/880E4F/ffffff?text=P${i}+Usage`,
+                    `https://placehold.co/400x400/E91E63/ffffff?text=P${i}+Detail`,
+                ],
+                // --- 20 BUYER REVIEWS (Each product gets a sequential set of 20 customers) ---
+                buyerPhotos: generateBuyerReviews(productId, i), // Pass sequential index 'i' (1 to 30)
+            };
+        };
+
+
+        // ====================================================================================================
+        // --- PRODUCT DATA INITIALIZATION (தயாரிப்பு தரவு இங்கே தெளிவாக 1 முதல் 30 வரை பிரிக்கப்பட்டுள்ளது) ---
+        // ====================================================================================================
+
+        const products = Array.from({ length: 30 }, (_, i) => createSingleProduct(i + 1));
+        
+        // Example structure for clarity:
+        /*
+        const products = [
+            createSingleProduct(1), // Product ID '1'
+            createSingleProduct(2), // Product ID '2'
+            // ...
+            createSingleProduct(30) // Product ID '30'
+        ];
+        */
+
+
+        // --- AUTH & FIREBASE INITIALIZATION ---
+        let db, auth;
+        let userId = null; 
+
+        async function initializeFirebase() {
+             if (!firebaseConfig) {
+                console.log("Firebase config not available. Skipping Firebase initialization.");
+                return;
+            }
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                setLogLevel('Debug');
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User signed in. UID:", userId);
+                    } else {
+                        userId = null;
+                        console.log("User signed out or failed to sign in.");
+                    }
+                    render(); 
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+            }
+        }
+
+        // --- CART FUNCTIONS ---
+
+        const addToCart = (productId, quantity = 1) => {
+            const id = productId; 
+            const product = products.find(p => p.id === id);
+            
+            if (!product) {
+                console.error("Product not found with ID:", id);
+                return;
+            }
+            
+            const qty = parseInt(quantity, 10);
+            if (qty < 1 || qty > 5 || isNaN(qty)) {
+                 showToast('Quantity must be between 1 and 5.');
+                 return;
+            }
+
+            const existingItem = cart.find(item => item.productId === id); 
+            if (existingItem) {
+                if (existingItem.quantity + qty > 5) {
+                    showToast(`You can only add up to 5 units of ${product.name}.`);
+                    return;
+                }
+                existingItem.quantity += qty;
+            } else {
+                cart.push({
+                    productId: id, 
+                    quantity: qty,
+                    price: product.price,
+                    name: product.name,
+                    image: product.imageUrls[0]
+                });
+            }
+            showToast(`${qty} item(s) of **${product.name.substring(0, 20)}...** added to cart successfully!`);
+            updateCartIcon();
+            render();
+        };
+        
+        const updateCartQuantity = (productId, newQuantity) => {
+            const id = productId;
+            const item = cart.find(item => item.productId === id); 
+            if (item) {
+                let qty = parseInt(newQuantity);
+                if (isNaN(qty)) qty = 1;
+                
+                if (qty > 0 && qty <= 5) {
+                    item.quantity = qty;
+                } else if (qty === 0) {
+                    cart = cart.filter(item => item.productId !== id);
+                    showToast('Item removed from cart.');
+                } else if (qty > 5) {
+                    item.quantity = 5;
+                    showToast('Maximum quantity limit is 5.');
+                }
+            }
+            updateCartIcon();
+            render();
+        };
+
+        const getCartTotal = () => {
+            return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+        };
+
+        const updateCartIcon = () => {
+            const totalQuantity = cart.reduce((total, item) => total + item.quantity, 0);
+            const cartIcon = document.getElementById('cart-icon-badge');
+            if (cartIcon) {
+                cartIcon.textContent = totalQuantity;
+                cartIcon.classList.toggle('hidden', totalQuantity === 0);
+            }
+        };
+
+        // --- NAVIGATION / VIEW MANAGEMENT ---
+
+        const setView = (newView, productId = null) => {
+            view = newView;
+            selectedProductId = productId;
+            showAllBuyerPhotos = false; // Reset buyer photo state when view changes
+            selectedQuantity = 1; 
+            render();
+        };
+        
+        const setCategory = (category) => {
+            currentCategory = category;
+            setView('list'); 
+        };
+
+        const checkCartAndSetView = (newView) => {
+            if (cart.length === 0 && (newView === 'cart' || newView === 'shipping')) {
+                 showToast('Your cart is empty. Add items to proceed.');
+            } else {
+                setView(newView);
+            }
+        };
+        
+        const goBack = () => {
+             if (view === 'detail') setView('list');
+             else if (view === 'cart') setView('list'); 
+             else if (view === 'shipping') setView('cart'); 
+             else if (view === 'confirmation') setView('list');
+             else setView('list'); // Default back to list
+        };
+
+        // --- MODAL HANDLING (Buyer Photos) ---
+
+        const openBuyerPhotoModal = (productId, photoId) => {
+            // Find product by its sequential ID (e.g., '1', '2', '3')
+            const product = products.find(p => p.id === productId); 
+            const photo = product?.buyerPhotos.find(p => p.id === photoId); 
+
+            if (!photo) return;
+
+            const modalContent = document.getElementById('modal-content');
+            modalContent.innerHTML = `
+                <div class="flex justify-end">
+                    <button onclick="closeBuyerPhotoModal()" class="text-gray-500 hover:text-gray-800">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                <!-- Customer Photo-vil Buyer Photo-vin imageUrl-ai kaattavum -->
+                <img src="${photo.customerAvatar.replace('100x100', '500x500')}" alt="Customer Photo" onerror="this.onerror=null;this.src='https://placehold.co/500x500/A0AEC0/ffffff?text=Image+Error'" class="w-full h-auto rounded-xl object-cover mb-4 shadow-lg"/>
+                <div class="p-2">
+                    <div class="flex items-center mb-2">
+                        <!-- Customer Avatar-ai display seyyavum -->
+                        <img src="${photo.customerAvatar}" alt="${photo.customerName}" class="w-10 h-10 rounded-full mr-3 border border-gray-200"/>
+                        <div>
+                            <p class="font-semibold text-gray-900">${photo.customerName}</p>
+                            ${renderStars(photo.rating)}
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-700 mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">${photo.comment}</p>
+                </div>
+            `;
+            // Initialize lucide icons for modal stars
+            lucide.createIcons();
+
+            const modal = document.getElementById('buyer-photo-modal');
+            modal.classList.remove('hidden', 'opacity-0');
+            modal.classList.add('opacity-100');
+            // Animate container
+            modal.querySelector('.modal-container').classList.remove('hidden');
+        };
+
+        const closeBuyerPhotoModal = () => {
+            const modal = document.getElementById('buyer-photo-modal');
+            modal.classList.add('opacity-0');
+            modal.querySelector('.modal-container').classList.add('hidden');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300); // Wait for transition
+        };
+
+        // Function to toggle show all photos state
+        const toggleShowAllBuyerPhotos = () => {
+            showAllBuyerPhotos = !showAllBuyerPhotos;
+            render();
+        };
+
+        // --- TOAST/ALERT MESSAGE ---
+        const showToast = (message) => {
+            let toast = document.getElementById('custom-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'custom-toast';
+                toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-xl text-sm transition-opacity duration-300 opacity-0 z-50';
+                document.body.appendChild(toast);
+            }
+            toast.innerHTML = message; // Use innerHTML for potential bolding/formatting
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 3000); // 3 seconds visibility
+        };
+
+
+        // --- RENDERING VIEWS ---
+
+        const renderHeader = (title, showBack = false) => {
+            return `
+                <div class="flex items-center justify-between p-4 bg-white shadow-md z-20 w-full">
+                    <div class="flex items-center">
+                        ${showBack ? `<button onclick="goBack()" class="mr-3 text-gray-600 hover:text-primary"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>` : ''}
+                        <h1 class="text-2xl font-extrabold text-gray-900">${title}</h1>
+                    </div>
+                    <button onclick="checkCartAndSetView('cart')" class="relative text-gray-600 hover:text-primary">
+                        <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+                        <span id="cart-icon-badge" class="absolute -top-2 -right-2 text-xs bg-red-600 text-white rounded-full h-4 w-4 flex items-center justify-center ${cart.length === 0 ? 'hidden' : ''}">${cart.reduce((total, item) => total + item.quantity, 0)}</span>
+                    </button>
+                </div>
+            `;
+        };
+
+        // Product List Content
+        const renderProductListContent = () => {
+            const filteredProducts = products.filter(p => p.category === currentCategory);
+            
+            const categoriesHtml = CATEGORIES.map(cat => `
+                <button onclick="setCategory('${cat}')" 
+                        class="px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap transition-all duration-200 
+                               ${currentCategory === cat ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-200 border border-gray-300'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            const productCards = filteredProducts.map(product => {
+                const discountPercent = product.discountPercent; 
+                const rating = product.rating.toFixed(1);
+
+                return `
+                    <!-- Single Product Card -->
+                    <div onclick="setView('detail', '${product.id}')" 
+                         class="bg-white w-full border border-gray-200 cursor-pointer p-0 
+                                transition-shadow duration-200 hover:shadow-lg focus:shadow-xl 
+                                rounded-xl overflow-hidden">
+                        
+                        <!-- Image Section -->
+                        <div class="relative">
+                            <img src="${product.imageUrls[0]}" alt="${product.name}" 
+                                 onerror="this.onerror=null;this.src='https://placehold.co/400x400/AD1457/ffffff?text=Image+Error'" 
+                                 class="w-full h-40 object-cover rounded-t-xl"/>
+                            
+                            <!-- Discount Badge -->
+                            <span class="absolute top-2 left-0 bg-green-600 text-white text-xs font-bold px-2 py-0.5 rounded-r-lg shadow-md">
+                                ${discountPercent}% OFF
+                            </span>
+                            
+                            <!-- Rating Badge -->
+                            <span class="absolute top-2 right-2 bg-white text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center shadow-md border border-gray-200">
+                                ${rating} <i data-lucide="star" class="w-3 h-3 ml-1 fill-yellow-500 text-yellow-500"></i>
+                            </span>
+                        </div>
+                        
+                        <!-- Info Section -->
+                        <div class="p-3 flex flex-col justify-between">
+                            <!-- Product Name -->
+                            <h3 class="font-medium text-sm text-gray-800 line-clamp-2">${product.name}</h3>
+                            
+                            <!-- Price Display -->
+                            <div class="flex items-end mt-1 space-x-2">
+                                <p class="text-xl font-extrabold text-primary">${formatPrice(product.price)}</p>
+                                <span class="text-xs text-gray-500 line-through">${formatPrice(product.originalPrice)}</span>
+                            </div>
+
+                            <!-- Discount Percentage and Free Delivery -->
+                            <div class="flex items-center justify-between mt-1">
+                                <span class="text-xs font-semibold text-green-600">You Save ${discountPercent}%</span>
+                                <p class="text-xs text-gray-500 flex items-center">
+                                    <i data-lucide="truck" class="w-3 h-3 mr-1"></i> Free Delivery
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <!-- Category Tab Bar (Sticky to top) -->
+                <div class="sticky top-0 bg-f0f2f5 p-3 z-10 border-b border-gray-200 shadow-sm">
+                    <div class="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+                        ${categoriesHtml}
+                    </div>
+                </div>
+
+                <!-- Product List Container - 2 Column Grid -->
+                <div class="grid grid-cols-2 gap-3 p-3">
+                    ${productCards.length > 0 ? productCards : 
+                        `<div class="col-span-2 p-8 text-center text-gray-500 bg-white rounded-xl shadow-lg">
+                            <i data-lucide="package-search" class="w-12 h-12 mx-auto mb-4 text-gray-400"></i>
+                            <p class="text-lg font-semibold">No products found in the **${currentCategory}** category.</p>
+                            <p class="text-sm mt-2">Please select another category above.</p>
+                        </div>`}
+                </div>
+            `;
+        };
+
+        const renderProductDetailContent = () => {
+            // Find product using the sequential ID (e.g., '1', '2', '3')
+            const product = products.find(p => p.id === selectedProductId); 
+            if (!product) return renderLoading();
+
+            const mainImageId = 'main-product-image';
+            // 5 product images-i thumbnail-kalukkaaga payanpaduthavum
+            const thumbnailsHtml = product.imageUrls.map((url, index) => `
+                <img src="${url}" alt="Thumbnail ${index + 1}" 
+                     onclick="document.getElementById('${mainImageId}').src='${url}'"
+                     onerror="this.onerror=null;this.src='https://placehold.co/100x100/A0AEC0/ffffff?text=T${index+1}'"
+                     class="w-full h-16 object-cover rounded-lg border border-gray-300 cursor-pointer hover:border-primary transition duration-200">
+            `).join('');
+            
+            // --- BUYER PHOTOS SECTION LOGIC ---
+            // 20 buyer photos-i payanpaduthavum. ஆரம்பத்தில் 8 புகைப்படங்களைக் காட்டவும்.
+            const initialDisplayCount = 8;
+            const totalPhotos = product.buyerPhotos.length; // Will be 20
+            
+            const displayedPhotos = showAllBuyerPhotos ? product.buyerPhotos : product.buyerPhotos.slice(0, initialDisplayCount);
+            const remainingPhotosCount = totalPhotos - initialDisplayCount;
+
+            const buyerPhotosHtml = displayedPhotos.map(photo => `
+                <img src="${photo.customerAvatar.replace('100x100', '150x150')}" alt="Buyer Photo ${photo.customerName}" 
+                     onclick="openBuyerPhotoModal('${product.id}', '${photo.id}')"
+                     onerror="this.onerror=null;this.src='https://placehold.co/150x150/A0AEC0/ffffff?text=B${photo.customerName}'"
+                     class="w-full h-20 object-cover rounded-lg cursor-pointer transition-transform duration-200 hover:scale-105 shadow-md">
+            `).join('');
+            
+            const showMoreButtonHtml = remainingPhotosCount > 0 && !showAllBuyerPhotos ? `
+                <button onclick="toggleShowAllBuyerPhotos()" 
+                        class="w-full h-20 bg-gray-100 text-primary font-bold rounded-lg border-2 border-dashed border-primary/50 flex flex-col items-center justify-center transition duration-200 hover:bg-gray-200">
+                    <i data-lucide="plus-circle" class="w-6 h-6 mb-1"></i>
+                    <span class="text-sm">+${remainingPhotosCount} More Photos</span>
+                </button>
+            ` : '';
+            
+            const hideButtonHtml = showAllBuyerPhotos ? `
+                <button onclick="toggleShowAllBuyerPhotos()" 
+                        class="w-full mt-4 bg-gray-200 text-gray-700 font-semibold py-2 rounded-full transition duration-200 hover:bg-gray-300">
+                    Hide Photos
+                </button>
+            ` : '';
+
+            // --- CUSTOMER REVIEWS SECTION ---
+            // 20 buyer photos-i payanpaduthavum
+            const customerReviewsHtml = product.buyerPhotos.map(photo => `
+                <div class="bg-white p-4 rounded-xl shadow-md border-t-4 border-primary/50 mb-4">
+                    <div class="flex items-start mb-3">
+                        <!-- Customer Avatar-ai display seyyavum -->
+                        <img src="${photo.customerAvatar}" alt="${photo.customerName}" class="w-12 h-12 rounded-full mr-4 border-2 border-primary/30"/>
+                        <div>
+                            <p class="font-bold text-lg text-gray-900">${photo.customerName}</p>
+                            ${renderStars(photo.rating)}
+                            <p class="text-sm text-gray-500 mt-1">Review ID: ${photo.id.split('_')[1]}</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-700 italic border-l-4 border-gray-200 pl-3 leading-relaxed">${photo.comment}</p>
+                </div>
+            `).join('');
+            
+            // Quantity Tabs HTML
+            const quantityTabsHtml = Array.from({ length: 5 }, (_, i) => i + 1).map(qty => `
+                <button onclick="setSelectedQuantity(${qty})" 
+                        class="w-10 h-10 border rounded-lg font-bold text-lg transition-all duration-200 
+                               ${selectedQuantity === qty ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'}">
+                    ${qty}
+                </button>
+            `).join('');
+
+            return `
+                <div class="view-content pb-20">
+                    <!-- Image Gallery -->
+                    <div class="bg-white shadow-xl">
+                        <!-- Main Image -->
+                        <img id="${mainImageId}" src="${product.imageUrls[0]}" alt="${product.name}" 
+                             onerror="this.onerror=null;this.src='https://placehold.co/400x400/AD1457/ffffff?text=Image+Error'"
+                             class="w-full h-96 object-cover transition-opacity duration-300"/>
+                        <div class="p-4 grid grid-cols-5 gap-2 bg-gray-50 border-t border-gray-200">
+                            ${thumbnailsHtml}
+                        </div>
+                    </div>
+
+                    <!-- Product Info -->
+                    <div class="p-4 bg-white mt-4 rounded-xl shadow-lg mx-3">
+                        <h2 class="text-2xl font-bold text-gray-900">${product.name}</h2>
+                        
+                        <!-- Product ID Display - For user confirmation -->
+                        <p class="text-xs text-gray-500 mt-1 mb-3 border-b pb-2">Unique Product ID: <span class="font-mono font-semibold text-primary text-base">${product.id}</span></p>
+
+                        <!-- Category Tag -->
+                        <span class="inline-block bg-purple-100 text-purple-700 text-xs font-semibold px-3 py-1 rounded-full mt-2">${product.category}</span>
+
+                        <!-- Quantity Tabs -->
+                        <div class="mt-4 pb-4 border-b border-gray-200">
+                            <span class="font-semibold text-gray-800 mb-2 block">Select Quantity (Max 5):</span>
+                            <div id="product-quantity-tabs" class="flex space-x-3">
+                                ${quantityTabsHtml}
+                            </div>
+                        </div>
+
+                        <!-- Price/Offer Display -->
+                        <div class="mt-4 flex items-center justify-between">
+                            <!-- Offer Price Display -->
+                            <div class="flex flex-col items-start">
+                                <span class="text-sm text-gray-500 line-through">${formatPrice(product.originalPrice)}</span>
+                                <p class="text-3xl font-extrabold text-primary">${formatPrice(product.price)}</p>
+                                <span class="text-xs font-semibold text-green-600 mt-1">${product.discountPercent}% OFFER Applied!</span>
+                            </div>
+                            
+                            <!-- Rating -->
+                            <div class="flex flex-col items-end">
+                                <div class="flex items-center text-base">
+                                    ${renderStars(product.rating.toFixed(1))}
+                                </div>
+                                <span class="text-gray-600 ml-2">(${product.reviews} Reviews)</span>
+                            </div>
+                        </div>
+                        
+                        
+                        <p class="text-gray-700 mt-4">${product.description}</p>
+                        
+                        <!-- Shipping Cost Free Label -->
+                        <div class="mt-4 flex items-center bg-green-50 p-3 rounded-lg border border-green-200">
+                            <i data-lucide="truck" class="w-5 h-5 text-green-700 mr-3"></i>
+                            <span class="font-bold text-green-700">Shipping Cost: FREE</span>
+                            <span class="text-sm text-green-600 ml-2">(All over India)</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Buyers Share Photo Section -->
+                    <div class="p-4 mt-4 bg-white rounded-xl shadow-lg mx-3">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Buyers Share Photo (${totalPhotos} Photos - COS${product.buyerPhotos[0].id.split('_')[1]} to COS${product.buyerPhotos[totalPhotos - 1].id.split('_')[1]})</h3>
+                        <div class="grid buyer-photo-grid gap-2">
+                            ${buyerPhotosHtml}
+                            ${showMoreButtonHtml}
+                        </div>
+                        ${hideButtonHtml}
+                    </div>
+                    
+                    <!-- CUSTOMER REVIEWS Section -->
+                    <div class="p-4 mt-4 mx-3">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Customer Reviews (${totalPhotos} Verified Buyers)</h3>
+                        ${customerReviewsHtml}
+                    </div>
+
+                </div>
+                
+                <!-- Fixed Footer/Add to Cart Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 flex justify-between items-center z-10">
+                    <div class="flex flex-col">
+                        <span class="text-sm text-gray-500">Total Price:</span>
+                        <span class="text-xl font-bold text-primary">${formatPrice(product.price * selectedQuantity)}</span>
+                    </div>
+                    <button id="add-to-cart-btn"
+                            data-product-id="${product.id}"
+                            class="bg-primary text-white font-bold py-3 px-6 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center">
+                        <i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>
+                        Add to Cart
+                    </button>
+                </div>
+            `;
+        };
+        
+        const renderCartContent = () => {
+            if (cart.length === 0) {
+                return `
+                    <div class="p-8 text-center bg-white m-4 rounded-xl shadow-lg">
+                        <i data-lucide="shopping-cart" class="w-16 h-16 text-gray-400 mx-auto mb-4"></i>
+                        <p class="text-xl font-semibold text-gray-700 mb-4">Your Cart is Empty</p>
+                        <p class="text-gray-500 mb-6">Explore our beautiful collection and add items to your cart.</p>
+                        <button onclick="setView('list')" class="bg-primary text-white font-bold py-3 px-6 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/50">
+                            Start Shopping
+                        </button>
+                    </div>
+                `;
+            }
+
+            const cartItemsHtml = cart.map(item => {
+                const product = products.find(p => p.id === item.productId);
+                return `
+                    <!-- Cart Item Card -->
+                    <div class="flex bg-white p-4 rounded-xl shadow-lg mb-4 border border-gray-100">
+                        <!-- Image and Product Info Container -->
+                        <div class="flex flex-grow items-start">
+                            <img src="${item.image}" alt="${item.name}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/AD1457/ffffff?text=Image'" class="w-20 h-20 object-cover rounded-lg mr-4 border border-gray-200"/>
+                            
+                            <div class="flex-grow">
+                                <h3 class="font-semibold text-gray-800 line-clamp-2">${item.name}</h3>
+                                <p class="text-sm text-gray-500 mt-1">Unit Price (Offer): ${formatPrice(item.price)}</p>
+                                <p class="text-primary text-xl font-bold mt-2">${formatPrice(item.price * item.quantity)}</p>
+
+                                <!-- Quantity Control -->
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <button onclick="updateCartQuantity('${item.productId}', ${item.quantity - 1})" class="text-gray-600 hover:text-red-600 p-1 border border-gray-300 bg-gray-50 rounded-lg transition duration-150 h-8 w-8 flex items-center justify-center">
+                                        <i data-lucide="minus" class="w-4 h-4"></i>
+                                    </button>
+                                    
+                                    <!-- Min 1, Max 5 for quantity -->
+                                    <input type="number" min="1" max="5" value="${item.quantity}" onchange="updateCartQuantity('${item.productId}', this.value)" 
+                                           class="w-12 text-center border border-gray-300 rounded-lg p-1 text-sm font-semibold focus:ring-primary focus:border-primary h-8"/>
+                                           
+                                    <button onclick="updateCartQuantity('${item.productId}', ${item.quantity + 1})" class="text-gray-600 hover:text-green-600 p-1 border border-gray-300 bg-gray-50 rounded-lg transition duration-150 h-8 w-8 flex items-center justify-center">
+                                        <i data-lucide="plus" class="w-4 h-4"></i>
+                                    </button>
+                                    
+                                    <!-- Remove Button -->
+                                    <button onclick="updateCartQuantity('${item.productId}', 0)" class="ml-4 text-red-500 hover:text-red-700 p-1 transition duration-150" title="Remove Item">
+                                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const total = getCartTotal();
+
+            return `
+                <div class="view-content p-4 pb-28">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Your Shopping Cart (${cart.length} Items)</h2>
+                    ${cartItemsHtml}
+                    
+                    <div class="mt-6 p-4 bg-white rounded-xl shadow-lg border border-primary/20">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">Order Summary</h3>
+                        <div class="flex justify-between text-gray-600 py-1">
+                            <span>Subtotal:</span>
+                            <span>${formatPrice(total)}</span>
+                        </div>
+                        <!-- Free Shipping is explicitly mentioned -->
+                        <div class="flex justify-between text-gray-600 py-1">
+                            <span>Shipping (Standard):</span>
+                            <span class="font-bold text-green-600">FREE</span>
+                        </div>
+                        <div class="flex justify-between text-lg font-bold text-gray-900 border-t border-dashed mt-3 pt-3">
+                            <span>Grand Total:</span>
+                            <span class="text-primary">${formatPrice(total)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Fixed Footer/Checkout Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 z-10">
+                    <button onclick="checkCartAndSetView('shipping')" class="w-full bg-primary text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center justify-center">
+                        <i data-lucide="package" class="w-5 h-5 mr-2"></i>
+                        Proceed to Checkout (${formatPrice(total)})
+                    </button>
+                </div>
+            `;
+        };
+
+        const renderShippingContent = () => {
+            const total = getCartTotal();
+
+            return `
+                <div class="view-content p-4 pb-28">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">Shipping & Payment</h2>
+
+                    <div class="p-4 bg-white rounded-xl shadow-lg mb-6 border border-primary/20">
+                         <h3 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Shipping Address</h3>
+                         <form id="shipping-form" onsubmit="handleOrderConfirmation(event)" class="space-y-4">
+                            <input type="text" id="name" placeholder="Full Name (eg: Janani B)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <input type="email" id="email" placeholder="Email (eg: janani@example.com)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <textarea id="address" placeholder="Shipping Address (Door No, Street)" rows="3" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"></textarea>
+                            <input type="text" id="pincode" placeholder="Pincode (eg: 600001)" required pattern="[0-9]{6}" title="6 digit pincode" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <!-- State and District fields -->
+                            <input type="text" id="district" placeholder="District (eg: Chennai)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            <input type="text" id="state" placeholder="State (eg: Tamil Nadu)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"/>
+                            
+                            <h3 class="text-xl font-semibold text-gray-800 mt-6 mb-4 border-b pb-2">Payment Method</h3>
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="radio" name="payment" value="cod" checked class="text-primary focus:ring-primary"/>
+                                    <span class="text-gray-700 font-medium">Cash on Delivery (COD)</span>
+                                </label>
+                                <p class="text-sm text-gray-500 ml-7 mt-1">Pay when you receive the product.</p>
+                            </div>
+                            <!-- Other payment methods could be added here -->
+
+                            <div class="text-right mt-6">
+                                <p class="text-2xl font-bold text-primary">Pay: ${formatPrice(total)}</p>
+                            </div>
+                            
+                            <!-- Submit Button in Fixed Footer -->
+                         </form>
+                    </div>
+                </div>
+                
+                <!-- Fixed Footer/Place Order Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-200 z-10">
+                    <button type="submit" form="shipping-form" class="w-full bg-primary text-white font-bold py-3 rounded-full transition-all duration-300 hover:bg-secondary shadow-lg shadow-primary/40 flex items-center justify-center">
+                        <i data-lucide="check-circle" class="w-5 h-5 mr-2"></i>
+                        Place Order
+                    </button>
+                </div>
+            `;
+        };
+
+        const handleOrderConfirmation = (event) => {
+            event.preventDefault();
+
+            // Form data retrieval
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const address = document.getElementById('address').value;
+            const pincode = document.getElementById('pincode').value;
+            const district = document.getElementById('district').value;
+            const state = document.getElementById('state').value;
+
+            if (!name || !email || !address || !pincode || !district || !state) {
+                showToast('Please fill out all required fields, including District and State.');
+                return;
+            }
+
+            // Show loading modal immediately
+            const loadingModal = document.getElementById('loading-modal');
+            loadingModal.classList.remove('hidden', 'opacity-0');
+            loadingModal.classList.add('opacity-100');
+
+
+            // 3 second delay (3000ms) for order processing
+            setTimeout(() => {
+                // Generate 10-digit random Order ID
+                const randomDigits = generateRandomId(10);
+                const orderId = 'ZOYA' + randomDigits;
+
+                // Confirmation data
+                const customerDetails = {
+                    name,
+                    email,
+                    address,
+                    pincode,
+                    district,
+                    state,
+                    orderId: orderId,
+                    totalItems: cart.reduce((total, item) => total + item.quantity, 0),
+                    totalPrice: getCartTotal(),
+                };
+
+                // Clear the cart after successful order
+                cart = [];
+                updateCartIcon();
+                
+                // Store details temporarily for confirmation page
+                sessionStorage.setItem('orderDetails', JSON.stringify(customerDetails));
+
+                // Hide loading modal
+                loadingModal.classList.add('opacity-0');
+                setTimeout(() => {
+                    loadingModal.classList.add('hidden');
+                    // Navigate to confirmation view
+                    setView('confirmation');
+                }, 300); // Wait for fade-out transition
+
+            }, 3000); // 3 seconds delay
+        };
+
+        const renderConfirmationContent = () => {
+             const customerDetails = JSON.parse(sessionStorage.getItem('orderDetails') || '{}');
+             const { name, address, pincode, email, state, district } = customerDetails;
+
+             return `
+                <div class="p-4 flex flex-col items-center justify-center h-full text-center">
+                    <i data-lucide="heart-handshake" class="w-24 h-24 text-primary mx-auto mb-6"></i>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">Order Successfully Confirmed!</h1>
+                    <p class="text-xl font-extrabold text-primary bg-primary/10 p-3 rounded-xl border border-primary/30 mb-6 shadow-md">
+                        Order ID: ${customerDetails.orderId || 'N/A'}
+                    </p>
+                    <p class="text-lg text-gray-600 mb-8">Thank you for shopping with ${APP_NAME}. Your order will be delivered soon.</p>
+                    <div class="bg-green-50 p-4 rounded-xl mb-8 w-full max-w-xs shadow-inner border border-green-300">
+                         <p class="font-semibold text-green-700">Delivery Address:</p>
+                         <p class="text-sm text-green-600 mt-1">${name}</p>
+                         <p class="text-sm text-green-600">${address}, Pincode: ${pincode}</p>
+                         <!-- State and District in Confirmation -->
+                         <p class="text-sm text-green-600">${district}, ${state}</p>
+                         <p class="text-sm text-green-600 mt-1 font-medium">Email: ${email}</p>
+                    </div>
+                    <button onclick="setView('list')" class="bg-primary text-white text-lg font-bold py-3 px-10 rounded-xl transition-all duration-300 hover:opacity-90 shadow-lg shadow-primary/50">
+                        Continue Shopping
+                    </button>
+                    <!-- Changed this button to use setView('list') to avoid an issue, as order history is demo -->
+                    <button onclick="setView('list')" class="mt-4 text-primary font-semibold hover:underline">
+                        View Order History (Demo)
+                    </button>
+                </div>
+            `;
+        };
+        
+        // --- NEW FUNCTION: ATTACH EVENT LISTENERS AFTER RENDER ---
+        const attachDetailListeners = () => {
+            if (view === 'detail') {
+                const btn = document.getElementById('add-to-cart-btn');
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        const productId = btn.dataset.productId;
+                        // selectedQuantity is globally updated by setSelectedQuantity()
+                        addToCart(productId, selectedQuantity);
+                    });
+                    console.log(`Event listener attached to product ${selectedProductId} 'Add to Cart' button.`);
+                }
+            }
+        };
+
+
+        // --- MAIN RENDER FUNCTION ---
+        const render = () => {
+            const app = document.getElementById('app');
+            let content = '';
+            let headerTitle = APP_NAME;
+            let showBack = false;
+
+            if (view === 'list') {
+                content = renderProductListContent();
+                headerTitle = APP_NAME; 
+            } else if (view === 'detail') {
+                content = renderProductDetailContent();
+                headerTitle = 'Product Details';
+                showBack = true;
+            } else if (view === 'cart') {
+                content = renderCartContent();
+                headerTitle = 'My Cart';
+                showBack = true;
+            } else if (view === 'shipping') {
+                 content = renderShippingContent();
+                 headerTitle = 'Checkout';
+                 showBack = true;
+            } else if (view === 'confirmation') {
+                 content = renderConfirmationContent();
+                 headerTitle = 'Order Confirmed';
+            } else {
+                content = renderLoading(); // Default or error state
+            }
+            
+            // Final DOM update
+            const headerHtml = renderHeader(headerTitle, showBack);
+            app.innerHTML = headerHtml + `<div class="view-content" id="view-content">${content}</div>`;
+
+            // Lucide icons-i re-initialize seyyavum (new content-kaaga)
+            lucide.createIcons();
+            updateCartIcon();
+            
+            // *** IMPORTANT: Attach listeners after rendering the content ***
+            attachDetailListeners(); 
+        };
+
+        // --- GLOBAL EXPORTS (Crucial for HTML onclick to work) ---
+        window.setView = setView;
+        window.setCategory = setCategory; 
+        window.goBack = goBack;
+        window.checkCartAndSetView = checkCartAndSetView;
+        window.addToCart = addToCart;
+        window.updateCartQuantity = updateCartQuantity;
+        window.openBuyerPhotoModal = openBuyerPhotoModal;
+        window.closeBuyerPhotoModal = closeBuyerPhotoModal;
+        window.toggleShowAllBuyerPhotos = toggleShowAllBuyerPhotos;
+        window.setSelectedQuantity = setSelectedQuantity;
+        window.handleOrderConfirmation = handleOrderConfirmation;
+        window.formatPrice = formatPrice; 
+
+        // --- AARAMBAM ---
+        window.onload = function () {
+            initializeFirebase();
+            render(); 
+        }
+
+    </script>
+</body>
+</html>

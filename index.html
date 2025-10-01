@@ -1,7 +1,7 @@
 <!-- 
     ========================================================================================================
-    SHOPZOYA E-COMMERCE - SINGLE FILE HTML/TAILWIND/JS APP 
-    (UPDATED: Firebase connection uses __firebase_config and __initial_auth_token)
+    SHOPZOYA E-COMMERCE - SINGLE FILE HTML/TAILWIND/JS APP (GITHUB PAGES READY)
+    NOTE: This version uses the static Firebase Config provided by the user and falls back to signInAnonymously().
     ========================================================================================================
 -->
 <!DOCTYPE html>
@@ -96,50 +96,38 @@
     <!-- Firebase SDK Modules -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Firestore-kku Debug logging-a enable seyyavum
         setLogLevel('Debug');
 
-        // --- FIREBASE CONFIGURATION & GLOBALS ---
-        // Canvas environment-il irundhu configuration edukkapadum (Mandatory)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const apiKey = ""; // API key environment-aal provide seyyappadum
-        let firebaseConfig = {};
-
-        // Environment's configuration-ai use seyyavum
-        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } catch (e) {
-                console.error("Error parsing __firebase_config:", e);
-            }
-        } else {
-             // Fallback/Error state. If the environment fails, log the issue.
-             console.error("Firebase config (JSON) is missing from environment variables.");
-        }
-
+        // --- FIREBASE CONFIGURATION (STATIC FOR GITHUB PAGES) ---
+        // Ungaloda details inga direct-a use pannapattulladhu.
+        const STATIC_APP_ID = 'shopzoya-prod'; // General ID for the app
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyCoSNrklmsrP5h_hXjHbZ5FASTJdwbxQlc",
+            authDomain: "zoya-db85d.firebaseapp.com",
+            projectId: "zoya-db85d",
+            storageBucket: "zoya-db85d.firebasestorage.app",
+            messagingSenderId: "22818294239",
+            appId: "1:22818294239:web:8907aefd2948f9eec75c6a",
+            measurementId: "G-SMD8YX8RP7"
+        };
+        
         let db, auth, userId = null;
         let isFirebaseReady = false;
 
         // Initialize Firebase services and authenticate the user
         async function initializeFirebase() {
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.error("Firebase initialization failed: Config is empty.");
-                return;
-            }
-
             console.log("Initializing Firebase...");
             try {
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Persistence set panna vendiyathillai, adhuku browserLocalPersistence thevai
-                // await setPersistence(auth, browserLocalPersistence);
-
                 // Set up the Authentication State listener
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -149,26 +137,20 @@
                         // Once authenticated, fetch products
                         await fetchProductsFromFirebase(); 
                     } else {
-                        // User sign-out aanaalum, idhu oru app-a fetchProducts panna mudiyadhu (UserId ilamal)
+                        // User sign-out aanaalum, data fetching skip aagum
                         userId = null;
                         isFirebaseReady = true;
-                        console.error("User is signed out or failed to sign in. Data fetching will be skipped.");
+                        console.error("User is signed out. Data fetching will be skipped.");
                         products.length = 0; // Clear products if sign-out aanaal
                         render();
                     }
                 });
 
-                // Use the initial auth token for authentication
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    // If no custom token is available, sign in anonymously
-                    await signInAnonymously(auth);
-                }
+                // GitHub Pages-kku Custom Token kidaikkadhu. Adhanaal, signInAnonymously dhan use seyya mudiyum.
+                await signInAnonymously(auth);
                 
             } catch (error) {
                 console.error("Firebase init error:", error);
-                // Fallback to local data rendering if firebase fails
                 isFirebaseReady = true;
                 products.push(...localProducts);
                 render();
@@ -178,16 +160,17 @@
         // Example: Fetch products collection from the correct path
         // Products-ai /artifacts/{appId}/users/{userId}/products-il save seyyavum
         async function fetchProductsFromFirebase() {
+            // UserId-ku badhila, oru general user ID-a use panna vendum for public data in a real app
+            // Aana, indha app unga personal data-va save pannuradhala, userId mukkiyam.
             if (!db || !userId) {
-                console.log("DB or User ID not ready for fetching.");
-                // Still use the local products as a fallback for the UI
+                console.log("DB or User ID not ready for fetching. Using local fallback.");
                 products.push(...localProducts);
                 render();
                 return;
             }
             
-            // Mandatory Firestore Private Data Path
-            const productsPath = `artifacts/${appId}/users/${userId}/products`;
+            // Mandatory Firestore Private Data Path (Using STATIC_APP_ID)
+            const productsPath = `artifacts/${STATIC_APP_ID}/users/${userId}/products`;
             console.log("Fetching products from path:", productsPath);
 
             try {
@@ -196,23 +179,21 @@
                 onSnapshot(productsRef, (querySnapshot) => {
                     const firebaseProducts = [];
                     querySnapshot.forEach((doc) => {
-                        firebaseProducts.push({ id: doc.id, ...doc.data() });
+                        // Firebase-la save aagum podhu 'id' string-a maarirukkalam.
+                        firebaseProducts.push({ id: doc.id, ...doc.data() }); 
                     });
                     
-                    // Replace local products and refresh UI
                     products.length = 0;
                     products.push(...firebaseProducts);
 
                     // If no products are found in Firestore, populate with default local products 
-                    // and write them back to Firestore for the first time setup.
                     if (products.length === 0) {
                         console.log("No products found. Populating Firestore with default data...");
                         localProducts.forEach(async (product) => {
-                             // Use doc.id as the document ID in Firestore if available, otherwise let Firestore generate it
-                            const docRef = doc(productsRef, product.id.toString());
+                            // ID-ai string-a maathanum (Firestore path-la number use panna mudiyadhu)
+                            const docRef = doc(productsRef, product.id.toString()); 
                             await setDoc(docRef, product); 
                         });
-                        // onSnapshot will handle the rendering once the data is written back
                     } else {
                         render(); // Refresh UI after getting data
                         console.log(`Products fetched (${products.length}) from Firestore successfully.`);
@@ -220,7 +201,6 @@
 
                 }, (error) => {
                     console.error("Error setting up onSnapshot listener:", error);
-                    // Use local products if real-time fetching fails
                     products.push(...localProducts);
                     render();
                 });
@@ -232,14 +212,13 @@
         }
         
         // --- DATA STRUCTURES (Local fallback for initial state) ---
-        // Ippo, products-ai Firebase-il irundhu edukkum varai idhu wait pannum.
         const localProducts = [
             // Dummy data for initialization if Firebase is empty or fails
-            { id: 1, name: "Luxury Silk Saree", price: 12500, category: 'sarees', image: 'https://placehold.co/400x600/AA168C/ffffff?text=Silk+Saree', description: "Handwoven pure silk saree with intricate zari work. Perfect for weddings and grand occasions. (Local Product)" },
-            { id: 2, name: "Premium Cotton Kurti", price: 3500, category: 'kurtis', image: 'https://placehold.co/400x600/9000a8/ffffff?text=Cotton+Kurti', description: "Comfortable and stylish cotton kurti with block print design. Ideal for daily wear. (Local Product)" },
-            { id: 3, name: "Designer Lehenga Set", price: 28000, category: 'lehengas', image: 'https://placehold.co/400x600/D016AA/ffffff?text=Lehenga+Set', description: "Embroidered lehenga with a matching choli and dupatta. A showstopper outfit. (Local Product)" },
-            { id: 4, name: "Casual Denim Jeans", price: 4500, category: 'jeans', image: 'https://placehold.co/400x600/000000/ffffff?text=Denim+Jeans', description: "High-quality stretchable denim jeans for women. Modern fit. (Local Product)" },
-            { id: 5, name: "Embroidered Blouse", price: 5500, category: 'blouses', image: 'https://placehold.co/400x600/AA168C/ffffff?text=Embroidered+Blouse', description: "Custom-fit embroidered blouse for sarees and lehengas. (Local Product)" },
+            { id: 1, name: "Luxury Silk Saree", price: 12500, category: 'sarees', image: 'https://placehold.co/400x600/AA168C/ffffff?text=Silk+Saree', description: "Handwoven pure silk saree with intricate zari work. Perfect for weddings and grand occasions." },
+            { id: 2, name: "Premium Cotton Kurti", price: 3500, category: 'kurtis', image: 'https://placehold.co/400x600/9000a8/ffffff?text=Cotton+Kurti', description: "Comfortable and stylish cotton kurti with block print design. Ideal for daily wear." },
+            { id: 3, name: "Designer Lehenga Set", price: 28000, category: 'lehengas', image: 'https://placehold.co/400x600/D016AA/ffffff?text=Lehenga+Set', description: "Embroidered lehenga with a matching choli and dupatta. A showstopper outfit." },
+            { id: 4, name: "Casual Denim Jeans", price: 4500, category: 'jeans', image: 'https://placehold.co/400x600/000000/ffffff?text=Denim+Jeans', description: "High-quality stretchable denim jeans for women. Modern fit." },
+            { id: 5, name: "Embroidered Blouse", price: 5500, category: 'blouses', image: 'https://placehold.co/400x600/AA168C/ffffff?text=Embroidered+Blouse', description: "Custom-fit embroidered blouse for sarees and lehengas." },
         ];
         
         let products = [];
@@ -248,7 +227,6 @@
         let currentView = 'home'; // 'home', 'detail', 'cart', 'checkout', 'confirmation'
         let selectedProduct = null;
         let selectedCategory = 'sarees';
-        let buyerPhotos = []; // Placeholder for buyer photos
         let showAllBuyerPhotos = false;
         let orderConfirmationDetails = null;
 
@@ -316,7 +294,8 @@
             if (existingItem) {
                 existingItem.quantity += quantity;
             } else {
-                cart.push({ ...product, quantity });
+                // Product ID-ai Firestore-la irundhu edukkum podhu id string-a irukkum
+                cart.push({ ...product, quantity, id: product.id.toString() }); 
             }
             showCustomModal('Added to Cart', `${quantity} x ${product.name} has been added to your cart.`);
             updateCartIcon();
@@ -366,8 +345,9 @@
 
         // --- FIREBASE WRITE FUNCTION (Order Confirmation) ---
         async function handleOrderConfirmation() {
-            if (!userId || !db) {
-                showCustomModal('Error', 'Cannot complete order. Firebase connection is not ready.');
+            // userId-ai use panni data save seyyavum, anonymous user-kum idhu unique-a irukkum
+            if (!userId || !db) { 
+                showCustomModal('Error', 'Cannot complete order. Please ensure Firebase has connected.');
                 return;
             }
 
@@ -394,8 +374,8 @@
                 timestamp: new Date().toISOString()
             };
 
-            // Order-ai /artifacts/{appId}/users/{userId}/orders-il save seyyavum
-            const ordersPath = `artifacts/${appId}/users/${userId}/orders`;
+            // Order-ai /artifacts/{STATIC_APP_ID}/users/{userId}/orders-il save seyyavum
+            const ordersPath = `artifacts/${STATIC_APP_ID}/users/${userId}/orders`;
 
             try {
                 const docRef = await addDoc(collection(db, ordersPath), newOrder);
@@ -744,7 +724,6 @@
 
         const attachDetailListeners = () => {
              // Inga dhan detail view-kku thevaiyana listeners-ai attach seyyavum.
-             // Ippodhikku, quantity input-a mattum handle seyyalam.
             const quantityInput = document.getElementById('quantity-input');
             if (quantityInput) {
                 // Ensure the quantity is always at least 1
@@ -809,7 +788,6 @@
         };
 
         // --- GLOBAL EXPORTS (Crucial for HTML onclick to work) ---\
-        // Window-vil functions-ai attach seyyavum (onclick events-kku thevai)
         window.setView = setView;
         window.setCategory = setCategory; 
         window.goBack = goBack;
@@ -822,12 +800,11 @@
         window.setSelectedQuantity = setSelectedQuantity;
         window.handleOrderConfirmation = handleOrderConfirmation;
         window.formatPrice = formatPrice; 
-        window.showCustomModal = showCustomModal; // Modal function-um export seyyavum
+        window.showCustomModal = showCustomModal; 
 
         // --- AARAMBAM (App Start) ---\
         window.onload = function () {
             initializeFirebase(); // Firebase connection-ai start seyyavum
-            // render() call, initializeFirebase-kku ullirundhu, auth state mariya piragu varum.
         }
 
     </script>

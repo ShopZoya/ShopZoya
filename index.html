@@ -1,0 +1,970 @@
+<!-- 
+    ========================================================================================================
+    SHOPZOYA E-COMMERCE - SINGLE FILE HTML/TAILWIND/JS APP 
+    (UPDATED: Now integrated with Firebase Firestore for product data)
+    ========================================================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShopZoya - E-commerce Ordering Workflow</title>
+    <!-- Tailwind CSS-i load seyyavum -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Azhagana icon-kalukkaga Lucide Icons-i load seyyavum -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Theme Colors */
+        :root {
+            --primary: #aa168c;
+            --secondary: #9000a8;
+        }
+
+        .custom-pink-purple { background-color: var(--primary); }
+        .custom-pink-purple-text { color: var(--primary); }
+        .custom-pink-purple-border { border-color: var(--primary); }
+        .bg-primary { background-color: var(--primary); }
+        .text-primary { color: var(--primary); }
+        .hover\:bg-secondary:hover { background-color: var(--secondary); }
+        
+        /* Mobile simulation-kaana App Container */
+        .app-container {
+            max-width: 480px;
+            min-height: 100vh;
+            margin: 0 auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+            background-color: #ffffff;
+            overflow: hidden;
+        }
+
+        /* Header Fix */
+        .app-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        /* Main Content Padding */
+        .view-content {
+            padding-bottom: 7rem; /* Space for the fixed footer/floating buttons */
+        }
+        
+        /* Custom Scrollbar for Reviews */
+        .buyer-photos-scroll::-webkit-scrollbar {
+            height: 4px;
+        }
+        .buyer-photos-scroll::-webkit-scrollbar-thumb {
+            background: #9000a8;
+            border-radius: 2px;
+        }
+        .buyer-photos-scroll::-webkit-scrollbar-track {
+            background: #f0f0f0;
+        }
+
+        /* Loader Animation */
+        .loader {
+            border-top-color: var(--primary);
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Modal Styles */
+        .modal {
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+            transform: translateY(100%);
+        }
+        .modal.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal.open .modal-content {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="app-container font-sans">
+        <!-- App content will be rendered here by JavaScript -->
+        <div class="p-4 text-center text-gray-500">Loading App...</div>
+    </div>
+    
+    <!-- Buyer Photo Modal Structure (Hidden by default) -->
+    <div id="buyerPhotoModal" class="modal fixed inset-0 bg-black bg-opacity-75 z-[100] opacity-0 invisible" onclick="closeBuyerPhotoModal(event)">
+        <div class="modal-content absolute bottom-0 left-0 w-full bg-white rounded-t-2xl p-4 shadow-2xl h-5/6" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-xl font-bold text-gray-800">Customer Photos</h3>
+                <button onclick="closeBuyerPhotoModal()" class="text-gray-500 hover:text-gray-800">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div id="modalPhotoContainer" class="overflow-y-auto h-full pr-2">
+                <!-- Large photos and comments will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // setLogLevel is imported here for debugging Firestore rules/issues
+        import { getFirestore, setLogLevel, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; 
+        // getAnalytics is imported but not actively used for this data flow
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+        // --- GLOBAL VARIABLES ---
+        const APP_NAME = "ShopZoya"; 
+        
+        // --- YOUR FIREBASE CONFIG (Unga config-a direct-a use panrom) ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyCoSNrklmsrP5h_hXjHbZ5FASTJdwbxQlc",
+          authDomain: "zoya-db85d.firebaseapp.com",
+          projectId: "zoya-db85d",
+          storageBucket: "zoya-db85d.firebasestorage.app",
+          messagingSenderId: "22818294239",
+          appId: "1:22818294239:web:8907aefd2948f9eec75c6a",
+          measurementId: "G-SMD8YX8RP7"
+        };
+        
+        let db, auth;
+        let userId = null; // User ID for session/future private data
+        let currentView = 'list'; // 'list', 'detail', 'cart', 'checkout', 'confirmation'
+        let selectedCategory = 'All';
+        let selectedProductId = null;
+        let cart = JSON.parse(localStorage.getItem('shopZoyaCart') || '[]');
+        let currentScrollY = 0; // To maintain scroll position on back button
+        let isAuthReady = false; // Auth state ready aanadhai track panna
+
+        // ====================================================================================================
+        // --- PRODUCT DATA INITIALIZATION (Ippodhu Firestore-le irundhu load seiyyappadum) ---
+        // ====================================================================================================
+
+        // Hardcoded product generation logic (PRODUCT_NAMES, createSingleProduct etc.) has been removed.
+        // Data ippo Firebase-la irundhu mattum dhan varum.
+        let products = []; 
+
+        // ====================================================================================================
+        // --- FIREBASE INITIALIZATION & DATA FETCHING ---
+        // ====================================================================================================
+
+        // Example: Fetch products collection and clean up the data types
+        async function fetchProductsFromFirebase() {
+          try {
+            // Un-authenticated users-ku access irukkanu confirm pannikonga (Firestore Rules-la)
+            const productsCol = collection(db, "products");
+            const querySnapshot = await getDocs(productsCol);
+            const firebaseProducts = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                
+                // Firestore-la irundhu varum data-va, unga rendering logic-ku thevaiyana format-ku maattrunga.
+                // Especially, Numbers (price, rating, discount) string-a irundhal, adhai Number-a maattrunga.
+                
+                const product = { 
+                    id: doc.id, 
+                    ...data,
+                    // Type conversion is essential for calculation/comparison
+                    price: parseFloat(data.price || 0), 
+                    originalPrice: parseFloat(data.originalPrice || 0),
+                    rating: parseFloat(data.rating || 0),
+                    discountPercent: parseInt(data.discountPercent || 0),
+                    // Ensure imageUrls and buyerPhotos are arrays, even if empty in Firestore
+                    imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [data.imageUrls].filter(Boolean),
+                    buyerPhotos: Array.isArray(data.buyerPhotos) ? data.buyerPhotos : []
+                };
+
+                firebaseProducts.push(product);
+            });
+
+            // Replace local products
+            products.length = 0;
+            products.push(...firebaseProducts);
+
+            console.log(`Products fetched from Firestore: ${products.length}`);
+            
+            // Render call is handled by the onAuthStateChanged listener to ensure flow
+          } catch (err) {
+            console.error("Error fetching products:", err);
+            // Error aanaalum, products list-a empty-a kaatta, render call aaganum
+          }
+        }
+
+        // Initialize Firebase, Auth, and then fetch data
+        async function initializeFirebase() {
+          if (!firebaseConfig.projectId) {
+            console.log("Firebase config not available. Skipping Firebase initialization.");
+            return;
+          }
+          try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            setLogLevel('Debug'); // Enable debug logging for Firebase
+
+            // If Analytics is needed
+            // getAnalytics(app); 
+
+            // Auth State Change Listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    console.log("Firebase connected ✅, UID:", userId);
+                } else {
+                    userId = null;
+                    console.log("User signed out or failed to sign in.");
+                }
+
+                // Auth state check mudinja piragu, data-va fetch panni render pannanum
+                if (!isAuthReady) {
+                    await fetchProductsFromFirebase();
+                    isAuthReady = true;
+                    render(); // Render after first data fetch
+                }
+            });
+
+            // Sign in anonymously to ensure we have a UID for read access
+            await signInAnonymously(auth);
+
+          } catch (error) {
+            console.error("Firebase init error:", error);
+            // Initialize aana error aanaalum, at least UI render aaganum (loading state clear aaganum)
+            render(); 
+          }
+        }
+
+
+        // ====================================================================================================
+        // --- CORE APPLICATION LOGIC ---
+        // ====================================================================================================
+
+        // --- STATE MANAGEMENT & NAVIGATION ---
+
+        function goBack() {
+            if (currentView === 'detail') {
+                currentView = 'list';
+                selectedProductId = null;
+            } else if (currentView === 'cart' || currentView === 'checkout') {
+                currentView = 'list';
+            } else if (currentView === 'confirmation') {
+                currentView = 'list';
+                cart = []; // Empty cart after confirmation
+                localStorage.setItem('shopZoyaCart', '[]');
+            }
+            // Restore scroll position when going back to list view
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollY);
+            });
+            render();
+        }
+
+        function setView(view, productId = null) {
+            if (currentView === 'list') {
+                // Save scroll position before navigating away from the list
+                currentScrollY = window.scrollY;
+            }
+            currentView = view;
+            selectedProductId = productId;
+            render();
+        }
+        
+        function checkCartAndSetView() {
+            if (cart.length === 0) {
+                alertUserMessage("Your cart is empty. Add some items first!", "warning");
+            } else {
+                setView('checkout');
+            }
+        }
+
+        function setCategory(category) {
+            selectedCategory = category;
+            render();
+        }
+
+        // --- CART LOGIC ---
+
+        function addToCart(productId, quantityInputId = 'selectedQuantity') {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            const quantityElement = document.getElementById(quantityInputId);
+            const quantity = quantityElement ? parseInt(quantityElement.value) : 1;
+
+            if (quantity <= 0) {
+                 alertUserMessage("Please select a valid quantity.", "warning");
+                 return;
+            }
+
+            const existingItemIndex = cart.findIndex(item => item.id === productId);
+
+            if (existingItemIndex > -1) {
+                cart[existingItemIndex].quantity += quantity;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    image: product.imageUrls[0],
+                    quantity: quantity
+                });
+            }
+
+            localStorage.setItem('shopZoyaCart', JSON.stringify(cart));
+            updateCartIcon();
+            
+            // Show confirmation message
+            alertUserMessage(`${product.name} (${quantity} items) added to cart!`, "success");
+            
+            // Navigate back to list or detail view stays. If we are on detail, clear the quantity input.
+            if (quantityElement) {
+                quantityElement.value = 1;
+            }
+            
+            // Re-render only necessary if we are on the cart page
+            if (currentView === 'cart') {
+                render();
+            }
+        }
+        
+        function updateCartQuantity(productId, newQuantity) {
+            const index = cart.findIndex(item => item.id === productId);
+            if (index > -1) {
+                const quantity = parseInt(newQuantity);
+                if (quantity > 0) {
+                    cart[index].quantity = quantity;
+                } else {
+                    cart.splice(index, 1); // Remove if quantity is 0 or less
+                }
+                localStorage.setItem('shopZoyaCart', JSON.stringify(cart));
+                updateCartIcon();
+                render();
+            }
+        }
+
+        // --- UI UTILITIES ---
+
+        function formatPrice(price) {
+            return `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        
+        function getProductById(id) {
+            return products.find(p => p.id === id);
+        }
+
+        function getCartTotal() {
+            return cart.reduce((total, item) => {
+                const product = getProductById(item.id);
+                const price = product ? product.price : item.price; // Fallback to cart price
+                return total + (price * item.quantity);
+            }, 0);
+        }
+
+        function updateCartIcon() {
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            const cartIcon = document.getElementById('cartIcon');
+            if (cartIcon) {
+                cartIcon.innerHTML = totalItems > 0 ? `<span class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full">${totalItems}</span><i data-lucide="shopping-cart" class="w-6 h-6"></i>` : `<i data-lucide="shopping-cart" class="w-6 h-6"></i>`;
+                lucide.createIcons();
+            }
+        }
+        
+        function alertUserMessage(message, type = "info") {
+            const appContainer = document.querySelector('.app-container');
+            if (!appContainer) return;
+
+            const colorMap = {
+                success: 'bg-green-500',
+                warning: 'bg-yellow-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500'
+            };
+            const bgColor = colorMap[type] || colorMap.info;
+
+            const messageBox = document.createElement('div');
+            messageBox.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-3 ${bgColor} text-white font-semibold rounded-lg shadow-xl z-[101] transition-all duration-300 ease-in-out opacity-0 scale-90`;
+            messageBox.innerText = message;
+            
+            appContainer.appendChild(messageBox);
+
+            // Show animation
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-0', 'scale-90');
+                messageBox.classList.add('opacity-100', 'scale-100');
+            }, 50);
+
+            // Hide animation
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100', 'scale-100');
+                messageBox.classList.add('opacity-0', 'scale-90');
+                
+                // Remove from DOM after transition
+                messageBox.addEventListener('transitionend', () => {
+                    messageBox.remove();
+                });
+            }, 3000);
+        }
+
+        // --- MODAL UTILITIES ---
+        
+        function openBuyerPhotoModal(productId) {
+            const product = getProductById(productId);
+            if (!product || !product.buyerPhotos || product.buyerPhotos.length === 0) return;
+
+            const modal = document.getElementById('buyerPhotoModal');
+            const container = document.getElementById('modalPhotoContainer');
+            
+            let photoHtml = '';
+            product.buyerPhotos.forEach(photo => {
+                photoHtml += `
+                    <div class="mb-6 p-4 border rounded-xl shadow-sm">
+                        <img src="${photo.url || `https://placehold.co/400x400/aa168c/ffffff?text=Buyer+Photo`}" 
+                             alt="Buyer Photo" 
+                             class="w-full h-auto object-cover rounded-lg mb-3 shadow-md"
+                             onerror="this.onerror=null;this.src='https://placehold.co/400x400/aa168c/ffffff?text=Buyer+Photo';"
+                        >
+                        <div class="flex items-center text-sm mb-1">
+                            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500 mr-1"></i>
+                            <span class="font-bold">${photo.rating.toFixed(1)} / 5.0</span>
+                        </div>
+                        <p class="text-gray-700 italic">"${photo.comment}"</p>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = photoHtml;
+            lucide.createIcons();
+            modal.classList.add('open');
+        }
+
+        function closeBuyerPhotoModal(event) {
+            // Close only if clicking the close button or background overlay
+            if (!event || event.target.id === 'buyerPhotoModal' || event.target.closest('button')?.dataset.lucide === 'x') {
+                document.getElementById('buyerPhotoModal').classList.remove('open');
+            }
+        }
+        
+        function toggleShowAllBuyerPhotos(productId) {
+            const container = document.getElementById(`buyerPhotosContainer-${productId}`);
+            const button = document.getElementById(`showAllReviewsButton-${productId}`);
+            
+            if (container.classList.contains('max-h-56')) {
+                container.classList.remove('max-h-56');
+                container.classList.add('max-h-full');
+                button.innerText = 'Show Less';
+            } else {
+                container.classList.remove('max-h-full');
+                container.classList.add('max-h-56');
+                button.innerText = 'Show All Reviews';
+            }
+        }
+        
+        function setSelectedQuantity(quantity) {
+             const input = document.getElementById('selectedQuantity');
+             if (input) {
+                 input.value = quantity;
+             }
+        }
+
+        // --- PAYMENT & CONFIRMATION LOGIC ---
+        
+        function handleOrderConfirmation() {
+            // Simple validation
+            const name = document.getElementById('name').value;
+            const address = document.getElementById('address').value;
+            const payment = document.querySelector('input[name="paymentMethod"]:checked');
+            
+            if (!name || !address || !payment) {
+                alertUserMessage("Please fill in all required fields and select a payment method.", "error");
+                return;
+            }
+            
+            // In a real app, data would be sent to a backend/Firestore collection (e.g., 'orders') here.
+            
+            // Success: navigate to confirmation view
+            setView('confirmation');
+        }
+        
+        // --- RENDERING FUNCTIONS ---
+
+        function renderLoading() {
+             return `
+                <div class="flex flex-col items-center justify-center min-h-[300px] p-6">
+                    <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+                    <p class="text-gray-600 font-semibold text-lg">Loading Products from Firebase...</p>
+                    <p class="text-gray-500 text-sm mt-1">Please ensure your Firestore 'products' collection has data and security rules allow public read access.</p>
+                </div>
+            `;
+        }
+
+        function renderStars(rating) {
+            const fullStars = Math.floor(rating);
+            const halfStar = rating % 1 >= 0.5;
+            const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+            let html = '';
+
+            for (let i = 0; i < fullStars; i++) {
+                html += `<i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>`;
+            }
+            if (halfStar) {
+                html += `<i data-lucide="star-half" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>`;
+            }
+            for (let i = 0; i < emptyStars; i++) {
+                html += `<i data-lucide="star" class="w-4 h-4 text-gray-300"></i>`;
+            }
+            return html;
+        }
+
+        function renderProductCard(product) {
+            const discountedPrice = formatPrice(product.price);
+            const originalPrice = formatPrice(product.originalPrice);
+
+            return `
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col cursor-pointer" onclick="setView('detail', '${product.id}')">
+                    <div class="w-full h-40 overflow-hidden relative">
+                        <img src="${product.imageUrls[0] || `https://placehold.co/400x400/aa168c/ffffff?text=${product.name.replace(/\s/g, '+')}`}" 
+                             alt="${product.name}" 
+                             class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                             onerror="this.onerror=null;this.src='https://placehold.co/400x400/aa168c/ffffff?text=${product.name.replace(/\s/g, '+')}';"
+                        >
+                        ${product.discountPercent > 0 ? `<span class="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">${product.discountPercent}% OFF</span>` : ''}
+                    </div>
+                    <div class="p-4 flex flex-col flex-grow">
+                        <h3 class="font-semibold text-gray-800 text-sm mb-1 truncate">${product.name}</h3>
+                        <div class="flex items-center text-xs mb-2">
+                            ${renderStars(product.rating)}
+                            <span class="text-gray-500 ml-2">(${product.rating.toFixed(1)})</span>
+                        </div>
+                        <div class="mt-auto">
+                            <div class="flex items-baseline">
+                                <span class="text-xl font-bold text-primary">${discountedPrice}</span>
+                                ${product.discountPercent > 0 ? `<span class="text-sm text-gray-400 ml-2 line-through">${originalPrice}</span>` : ''}
+                            </div>
+                            <button onclick="event.stopPropagation(); addToCart('${product.id}', 'list_quantity_${product.id}')" 
+                                    class="mt-2 w-full bg-primary text-white text-sm font-semibold py-2 rounded-full hover:bg-secondary transition-colors duration-200 shadow-md">
+                                Add to Cart
+                            </button>
+                            <!-- Hidden quantity input for list view -->
+                            <input type="hidden" id="list_quantity_${product.id}" value="1">
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderListContent() {
+            if (!isAuthReady) {
+                return renderLoading();
+            }
+
+            const filteredProducts = selectedCategory === 'All'
+                ? products
+                : products.filter(p => p.category === selectedCategory);
+                
+            const categories = ['All', ...new Set(products.map(p => p.category).filter(c => c))];
+
+            // Category Tabs
+            const categoryTabs = categories.map(cat => `
+                <button onclick="setCategory('${cat}')" 
+                        class="px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 
+                        ${selectedCategory === cat ? 'bg-primary text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+                    ${cat}
+                </button>
+            `).join('');
+
+            // Product Cards
+            const productCards = filteredProducts.length > 0
+                ? filteredProducts.map(renderProductCard).join('')
+                : `<div class="col-span-2 text-center py-10 text-gray-500">No products found for this category.</div>`;
+
+            return `
+                <div class="p-4">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Welcome to ShopZoya</h2>
+                    <p class="text-gray-600 mb-6">Find the latest fashion and accessories at unbeatable prices.</p>
+                </div>
+
+                <div class="px-4 pb-4 overflow-x-auto whitespace-nowrap border-b border-gray-100">
+                    <div class="inline-flex space-x-3">
+                        ${categoryTabs}
+                    </div>
+                </div>
+
+                <div class="p-4 grid grid-cols-2 gap-4">
+                    ${productCards}
+                </div>
+            `;
+        }
+        
+        function renderDetailContent() {
+            const product = getProductById(selectedProductId);
+            if (!product) {
+                return `<div class="p-6 text-center text-red-500">Product not found.</div>`;
+            }
+            
+            const discountedPrice = formatPrice(product.price);
+            const originalPrice = formatPrice(product.originalPrice);
+            const firstImage = product.imageUrls[0];
+            const hasReviews = product.buyerPhotos && product.buyerPhotos.length > 0;
+            const displayedReviews = product.buyerPhotos.slice(0, 3);
+            
+            return `
+                <div class="relative">
+                    <!-- Image Gallery -->
+                    <div class="w-full h-96 overflow-hidden bg-gray-100">
+                        <img src="${firstImage || `https://placehold.co/480x384/aa168c/ffffff?text=${product.name.replace(/\s/g, '+')}`}" 
+                             alt="${product.name}" 
+                             class="w-full h-full object-cover"
+                             onerror="this.onerror=null;this.src='https://placehold.co/480x384/aa168c/ffffff?text=${product.name.replace(/\s/g, '+')}';"
+                        >
+                    </div>
+
+                    <!-- Details Card -->
+                    <div class="p-4 bg-white rounded-t-3xl -mt-6 relative z-10 shadow-t-xl">
+                        <h1 class="text-3xl font-extrabold text-gray-900 mb-2">${product.name}</h1>
+                        
+                        <!-- Price and Discount -->
+                        <div class="flex items-baseline mb-4">
+                            <span class="text-4xl font-extrabold text-primary mr-3">${discountedPrice}</span>
+                            ${product.discountPercent > 0 ? `
+                                <span class="text-lg text-gray-400 line-through mr-3">${originalPrice}</span>
+                                <span class="text-base font-bold text-red-600">${product.discountPercent}% OFF</span>
+                            ` : ''}
+                        </div>
+                        
+                        <!-- Rating -->
+                        <div class="flex items-center mb-6 border-b pb-4">
+                            ${renderStars(product.rating)}
+                            <span class="text-gray-600 ml-2 font-semibold text-lg">${product.rating.toFixed(1)}</span>
+                            <span class="text-gray-400 ml-2">(${product.buyerPhotos.length} Reviews)</span>
+                        </div>
+
+                        <!-- Description -->
+                        <h2 class="text-xl font-bold text-gray-800 mb-3">Product Description</h2>
+                        <p class="text-gray-700 mb-6 leading-relaxed">${product.description || 'No detailed description provided.'}</p>
+                        
+                        <!-- Buyer Reviews Section -->
+                        ${hasReviews ? `
+                            <h2 class="text-xl font-bold text-gray-800 mb-3 flex justify-between items-center">
+                                Customer Reviews 
+                                <span class="text-sm font-normal text-primary">View All (${product.buyerPhotos.length})</span>
+                            </h2>
+                            
+                            <!-- Scrollable Photo Thumbnails -->
+                            <div class="flex space-x-3 overflow-x-auto pb-3 buyer-photos-scroll cursor-pointer mb-4" onclick="openBuyerPhotoModal('${product.id}')">
+                                ${product.buyerPhotos.map(photo => `
+                                    <div class="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 border-primary/50 shadow-md">
+                                        <img src="${photo.url || 'https://placehold.co/80x80/aa168c/ffffff?text=P'}" 
+                                             alt="Review Photo" 
+                                             class="w-full h-full object-cover"
+                                             onerror="this.onerror=null;this.src='https://placehold.co/80x80/aa168c/ffffff?text=P';"
+                                        >
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <!-- Text Reviews -->
+                            <div id="buyerPhotosContainer-${product.id}" class="space-y-4 overflow-hidden transition-all duration-500 max-h-56 relative mb-4">
+                                ${displayedReviews.map(review => `
+                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 shadow-inner">
+                                        <div class="flex items-center text-sm mb-1">
+                                            ${renderStars(review.rating)}
+                                            <span class="font-bold ml-2 text-gray-700">${review.rating.toFixed(1)}</span>
+                                        </div>
+                                        <p class="text-gray-700 italic text-sm line-clamp-2">"${review.comment}"</p>
+                                    </div>
+                                `).join('')}
+                                ${product.buyerPhotos.length > 3 ? `
+                                    <div class="absolute bottom-0 w-full h-12 bg-gradient-to-t from-white to-transparent"></div>
+                                ` : ''}
+                            </div>
+
+                            ${product.buyerPhotos.length > 3 ? `
+                                <button id="showAllReviewsButton-${product.id}" onclick="toggleShowAllBuyerPhotos('${product.id}')" class="w-full text-primary font-semibold py-2 rounded-lg border border-primary/50 hover:bg-primary/5 transition-colors duration-200">
+                                    Show All Reviews
+                                </button>
+                            ` : ''}
+
+                        ` : `<div class="text-center py-6 text-gray-500 border-t mt-4">No customer reviews yet.</div>`}
+                        
+                    </div>
+                </div>
+
+                <!-- Fixed Footer for Add to Cart -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-100 z-40">
+                    <div class="flex items-center justify-between mb-3">
+                        <label for="selectedQuantity" class="text-lg font-semibold text-gray-800">Quantity:</label>
+                        <div class="flex space-x-2">
+                            <button onclick="setSelectedQuantity(1)" class="px-3 py-1 text-sm rounded-full bg-gray-100 hover:bg-primary/10 text-gray-700">1</button>
+                            <button onclick="setSelectedQuantity(2)" class="px-3 py-1 text-sm rounded-full bg-gray-100 hover:bg-primary/10 text-gray-700">2</button>
+                            <button onclick="setSelectedQuantity(3)" class="px-3 py-1 text-sm rounded-full bg-gray-100 hover:bg-primary/10 text-gray-700">3</button>
+                            <input type="number" id="selectedQuantity" value="1" min="1" class="w-16 text-center border rounded-full focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+                    <button onclick="addToCart('${product.id}')" class="w-full custom-pink-purple text-white text-lg font-bold py-3 rounded-full hover:bg-secondary transition-colors duration-200 shadow-xl shadow-primary/30">
+                        Add to Cart
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderCartContent() {
+            if (cart.length === 0) {
+                return `
+                    <div class="p-6 text-center min-h-[50vh] flex flex-col justify-center items-center">
+                        <i data-lucide="shopping-cart" class="w-16 h-16 text-gray-300 mb-4"></i>
+                        <h2 class="text-2xl font-bold text-gray-700 mb-2">Your cart is empty</h2>
+                        <p class="text-gray-500 mb-6">Looks like you haven't added anything yet.</p>
+                        <button onclick="setView('list')" class="custom-pink-purple text-white font-semibold px-6 py-3 rounded-full shadow-lg hover:bg-secondary transition-colors duration-200">
+                            Start Shopping
+                        </button>
+                    </div>
+                `;
+            }
+
+            const cartItemsHtml = cart.map(item => {
+                const product = getProductById(item.id);
+                const name = product ? product.name : item.name;
+                const image = product ? product.imageUrls[0] : item.image;
+                const price = product ? product.price : item.price;
+                
+                return `
+                    <div class="flex p-4 border-b border-gray-100 bg-white hover:bg-gray-50 transition-colors duration-150">
+                        <div class="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 mr-4">
+                            <img src="${image || `https://placehold.co/80x80/aa168c/ffffff?text=${name.replace(/\s/g, '+')}`}" 
+                                 alt="${name}" 
+                                 class="w-full h-full object-cover"
+                                 onerror="this.onerror=null;this.src='https://placehold.co/80x80/aa168c/ffffff?text=Item';"
+                            >
+                        </div>
+                        <div class="flex-grow">
+                            <h3 class="font-semibold text-gray-800 text-base line-clamp-2">${name}</h3>
+                            <p class="text-primary font-bold mt-1">${formatPrice(price)}</p>
+                        </div>
+                        <div class="flex flex-col items-end justify-between ml-4">
+                            <button onclick="updateCartQuantity('${item.id}', 0)" class="text-red-500 hover:text-red-700 transition-colors">
+                                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                            </button>
+                            <div class="flex items-center mt-2 border rounded-full overflow-hidden">
+                                <button onclick="updateCartQuantity('${item.id}', ${item.quantity - 1})" class="px-3 py-1 text-gray-600 hover:bg-gray-100">-</button>
+                                <input type="number" value="${item.quantity}" 
+                                       onchange="updateCartQuantity('${item.id}', this.value)"
+                                       class="w-10 text-center border-l border-r border-gray-200 text-sm font-medium focus:outline-none focus:ring-0" 
+                                       min="1">
+                                <button onclick="updateCartQuantity('${item.id}', ${item.quantity + 1})" class="px-3 py-1 text-gray-600 hover:bg-gray-100">+</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const total = getCartTotal();
+
+            return `
+                <div class="bg-gray-50 min-h-full">
+                    <div class="divide-y divide-gray-200 shadow-md">
+                        ${cartItemsHtml}
+                    </div>
+
+                    <div class="p-4 mt-6 bg-white rounded-t-xl shadow-xl fixed bottom-0 left-0 right-0 max-w-sm mx-auto z-40">
+                        <div class="flex justify-between items-center text-xl font-bold mb-4">
+                            <span>Subtotal:</span>
+                            <span class="text-primary">${formatPrice(total)}</span>
+                        </div>
+                        <button onclick="checkCartAndSetView()" class="w-full custom-pink-purple text-white text-lg font-bold py-3 rounded-full hover:bg-secondary transition-colors duration-200 shadow-lg">
+                            Proceed to Checkout
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderCheckoutContent() {
+            const total = getCartTotal();
+            if (cart.length === 0) return renderCartContent();
+
+            const cartSummary = cart.map(item => {
+                const product = getProductById(item.id);
+                const name = product ? product.name : item.name;
+                const price = product ? product.price : item.price;
+                return `<li class="flex justify-between text-sm py-1 border-b border-dashed border-gray-200">
+                            <span class="text-gray-600">${item.quantity} x ${name}</span>
+                            <span class="font-medium text-gray-700">${formatPrice(price * item.quantity)}</span>
+                        </li>`;
+            }).join('');
+
+            return `
+                <div class="p-4 space-y-6 bg-gray-50 min-h-screen">
+                    
+                    <!-- Order Summary -->
+                    <div class="bg-white p-5 rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold text-gray-800 mb-3 border-b pb-2">Order Summary</h2>
+                        <ul class="space-y-1 mb-4">${cartSummary}</ul>
+                        <div class="flex justify-between items-center text-xl font-bold pt-3 border-t border-primary/20">
+                            <span>Grand Total:</span>
+                            <span class="text-primary">${formatPrice(total)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Shipping Information -->
+                    <div class="bg-white p-5 rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">Shipping Information</h2>
+                        <form id="checkoutForm" class="space-y-4">
+                            <div>
+                                <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                                <input type="text" id="name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition-shadow" placeholder="Your Name">
+                            </div>
+                            <div>
+                                <label for="address" class="block text-sm font-medium text-gray-700 mb-1">Full Address *</label>
+                                <textarea id="address" rows="3" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition-shadow" placeholder="Street, City, State, Zip"></textarea>
+                            </div>
+                            <div>
+                                <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">Phone Number (Optional)</label>
+                                <input type="tel" id="phone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition-shadow" placeholder="10-digit number">
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Payment Method -->
+                    <div class="bg-white p-5 rounded-xl shadow-lg mb-20">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Payment Method</h2>
+                        <div class="space-y-3">
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors duration-150">
+                                <input type="radio" name="paymentMethod" value="cod" class="text-primary focus:ring-primary" checked>
+                                <i data-lucide="wallet" class="w-5 h-5 ml-3 text-gray-600"></i>
+                                <span class="ml-2 font-medium text-gray-700">Cash on Delivery (COD)</span>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors duration-150">
+                                <input type="radio" name="paymentMethod" value="card" class="text-primary focus:ring-primary" disabled>
+                                <i data-lucide="credit-card" class="w-5 h-5 ml-3 text-gray-600"></i>
+                                <span class="ml-2 font-medium text-gray-700">Online Payment (Coming Soon)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fixed Footer for Checkout Button -->
+                <div class="fixed bottom-0 left-0 right-0 max-w-sm mx-auto bg-white p-4 shadow-2xl border-t border-gray-100 z-40">
+                    <button onclick="handleOrderConfirmation()" class="w-full custom-pink-purple text-white text-lg font-bold py-3 rounded-full hover:bg-secondary transition-colors duration-200 shadow-lg">
+                        Place Order - ${formatPrice(total)}
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderConfirmationContent() {
+            return `
+                <div class="p-6 text-center min-h-[70vh] flex flex-col justify-center items-center">
+                    <i data-lucide="check-circle" class="w-20 h-20 text-green-500 mb-6 animate-pulse"></i>
+                    <h2 class="text-3xl font-extrabold text-gray-800 mb-3">Order Placed Successfully!</h2>
+                    <p class="text-gray-600 mb-2 text-lg">Your order is confirmed and is being processed.</p>
+                    <p class="text-gray-500 text-sm mb-8">We will notify you when your items are shipped.</p>
+                    <p class="text-primary font-bold text-xl mb-12">Total: ${formatPrice(getCartTotal())}</p>
+                    
+                    <button onclick="setView('list')" class="custom-pink-purple text-white font-semibold px-8 py-3 rounded-full shadow-xl hover:bg-secondary transition-colors duration-200">
+                        Continue Shopping
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderHeader(title, showBack) {
+            const backButton = showBack 
+                ? `<button onclick="goBack()" class="p-2 text-gray-600 hover:text-gray-800 transition-colors duration-150">
+                       <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                   </button>` 
+                : `<div class="w-10"></div>`; // Placeholder for alignment
+
+            return `
+                <header class="app-header bg-white shadow-md p-4 flex items-center justify-between">
+                    ${backButton}
+                    <h1 class="text-xl font-bold text-gray-800">${title}</h1>
+                    <button onclick="setView('cart')" class="p-2 relative text-gray-600 hover:text-primary transition-colors duration-150">
+                        <div id="cartIcon" class="relative">
+                           <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+                        </div>
+                    </button>
+                </header>
+            `;
+        }
+        
+        function attachDetailListeners() {
+            // Placeholder for any dynamic event listeners needed after rendering, e.g., image change, review pagination.
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            let content = '';
+            let headerTitle = APP_NAME;
+            let showBack = false;
+
+            if (!isAuthReady) {
+                content = renderLoading();
+            } else if (currentView === 'list') {
+                content = renderListContent();
+            } else if (currentView === 'detail') {
+                 content = renderDetailContent();
+                 headerTitle = 'Product Details';
+                 showBack = true;
+            } else if (currentView === 'cart') {
+                 content = renderCartContent();
+                 headerTitle = 'My Cart';
+                 showBack = true;
+            } else if (currentView === 'checkout') {
+                 content = renderCheckoutContent();
+                 headerTitle = 'Checkout';
+                 showBack = true;
+            } else if (currentView === 'confirmation') {
+                 content = renderConfirmationContent();
+                 headerTitle = 'Order Confirmed';
+            } else {
+                content = renderLoading(); // Default or error state
+            }
+            
+            const headerHtml = renderHeader(headerTitle, showBack);
+            app.innerHTML = headerHtml + `<div class="view-content" id="view-content">${content}</div>`;
+
+            lucide.createIcons();
+            updateCartIcon();
+            
+            attachDetailListeners(); 
+        };
+
+        // --- GLOBAL EXPORTS (Crucial for HTML onclick to work) ---
+        window.setView = setView;
+        window.setCategory = setCategory; 
+        window.goBack = goBack;
+        window.checkCartAndSetView = checkCartAndSetView;
+        window.addToCart = addToCart;
+        window.updateCartQuantity = updateCartQuantity;
+        window.openBuyerPhotoModal = openBuyerPhotoModal;
+        window.closeBuyerPhotoModal = closeBuyerPhotoModal;
+        window.toggleShowAllBuyerPhotos = toggleShowAllBuyerPhotos;
+        window.setSelectedQuantity = setSelectedQuantity;
+        window.handleOrderConfirmation = handleOrderConfirmation;
+        window.formatPrice = formatPrice; 
+
+        // --- AARAMBAM ---
+        window.onload = function () {
+            initializeFirebase();
+            // Initial render() call is removed here, as it's now triggered 
+            // after Firebase Auth state is ready inside initializeFirebase().
+        }
+
+    </script>
+</body>
+</html>
+

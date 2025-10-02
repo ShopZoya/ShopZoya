@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>தயாiரிப்பு கடை (Product Store)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#1056A0',
+                        'secondary-gray': '#F5F7FA',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* கன்டென்ட் மையத்தில் இருக்க சிறிய திரைக்கான ஸ்டைலிங் */
+        .container {
+            max-width: 100%;
+            padding: 1rem;
+        }
+        @media (min-width: 768px) {
+            .container {
+                max-width: 900px;
+                padding: 2rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-secondary-gray min-h-screen font-sans text-gray-800">
+
+    <!-- முகப்புப் பக்கம் மற்றும் விவரப் பக்கத்தைக் காட்ட உதவும் முக்கிய கொள்கலன் -->
+    <div id="app" class="container mx-auto">
+        
+        <!-- முகப்புப் பக்கம்: தயாரிப்பு அட்டை (Product Card) -->
+        <div id="home-view" class="p-4 md:p-8" style="display: none;">
+            <h1 class="text-3xl font-extrabold text-primary-blue mb-6 border-b pb-2">முகiiப்புப் பக்கம் (Main Page)</h1>
+            
+            <!-- தயாரிப்பு அட்டை -->
+            <div id="product-card" class="bg-white shadow-xl rounded-2xl overflow-hidden transform transition duration-500 hover:scale-[1.02] cursor-pointer" onclick="showProductDetails()">
+                <div class="md:flex">
+                    <!-- படம்: முதல் படத்துக்கான புதிய பாதை (images/ms_1yjed_512_557235006.jpg) பயன்படுத்தப்பட்டுள்ளது -->
+                    <div class="md:w-1/3">
+                        <img src="images/ms_1yjed_512_557235006.jpg" alt="நேர்த்தியான சில்வர் வாட்ச்" class="w-full h-64 object-cover md:h-full">
+                    </div>
+                    <!-- விவரங்கள் -->
+                    <div class="md:w-2/3 p-6 flex flex-col justify-center">
+                        <h2 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">நேர்த்தியான சில்வர் குவார்ட்ஸ் வாட்ச்</h2>
+                        <p class="text-primary-blue text-lg font-semibold mb-4">விலை: ₹1,999</p>
+                        <p class="text-gray-600 mb-4 line-clamp-3">
+                            இது ஆண்கள் மற்றும் பெண்களுக்கு ஏற்ற உயர்தர சில்வர் குவார்ட்ஸ் வாட்ச் ஆகும். இது நீடித்த உழைப்பையும், துல்லியமான நேரத்தையும் உறுதி செய்கிறது.
+                        </p>
+                        <button class="w-full md:w-auto bg-primary-blue text-white py-3 px-6 rounded-xl font-bold hover:bg-blue-700 transition duration-300 shadow-md shadow-blue-300">
+                            விவரங்களைப் பார்க்க கிளிக் செய்யவும் (Click to View Details)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 p-4 bg-yellow-100 border border-yellow-300 rounded-lg text-sm text-yellow-800">
+                <p><strong>கவனத்திற்கு:</strong> இந்த புதிய பாதை (Path) சரியாக வேலை செய்ய, உங்கள் **`index.html`** கோப்புக்கு அருகில் ஒரு **`images`** என்ற ஃபோல்டரை உருவாக்கி, அதற்குள் நீங்கள் அப்லோட் செய்த படங்களை இந்த புதிய பெயர்களுடன் வைக்க வேண்டும்.</p>
+            </div>
+        </div>
+
+        <!-- தயாரிப்பு விவரங்கள் பக்கம் (Product Details Page) -->
+        <div id="details-view" class="p-4 md:p-8" style="display: none;">
+            
+            <!-- பின் செல்லும் பொத்தான் -->
+            <button class="flex items-center text-primary-blue hover:text-blue-700 transition mb-6" onclick="showHome()">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                பின் செல்லவும் (Go Back)
+            </button>
+            
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-8 border-b pb-2">தயாரிப்பு விவரங்கள் (Product Details)</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- படம் மற்றும் கேலரி பிரிவு -->
+                <div class="space-y-4">
+                    <!-- முக்கிய படம் -->
+                    <div class="bg-white rounded-xl shadow-lg p-2">
+                        <img id="main-image" src="" alt="தயாரிப்பின் முக்கிய படம்" class="w-full h-80 md:h-96 object-contain rounded-lg">
+                    </div>
+                    
+                    <!-- சிறுபட கேலரி (Thumbnail Gallery) -->
+                    <div id="thumbnail-gallery" class="flex flex-wrap justify-center gap-2 p-2 bg-white rounded-xl shadow-md">
+                        <!-- படங்கள் JavaScript மூலம் இங்கே சேர்க்கப்படும் -->
+                    </div>
+                </div>
+
+                <!-- தயாரிப்பு தகவல் பிரிவு -->
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-bold text-gray-900">நேர்த்தியான சில்வர் குவார்ட்ஸ் வாட்ச்</h2>
+                    <p class="text-4xl font-extrabold text-primary-blue">₹1,999 <span class="text-lg text-gray-500 line-through ml-3">₹3,999</span></p>
+
+                    <!-- விளக்கம் -->
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2 border-b pb-1 text-primary-blue">விளக்கம் (Description)</h3>
+                        <ul class="list-disc list-inside text-gray-700 space-y-2 pl-4">
+                            <li>உயர்தர துருப்பிடிக்காத ஸ்டீல் (High Quality Stainless Steel)</li>
+                            <li>துல்லியமான குவார்ட்ஸ் இயக்கம் (Precise Quartz Movement)</li>
+                            <li>நீடித்த உழைப்பிற்கான சதுர டயல் (Square Dial for lasting durability)</li>
+                            <li>தினசரி பயன்பாட்டிற்கு ஏற்ற நீர் எதிர்ப்பு (Water Resistant for daily use)</li>
+                            <li>கிளாசிக் மற்றும் நவீன வடிவமைப்பின் கலவை (A blend of classic and modern design)</li>
+                        </ul>
+                    </div>
+
+                    <!-- செயல்படாத பொத்தான் -->
+                    <button class="w-full bg-green-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-green-700 transition duration-300 shadow-lg shadow-green-300">
+                        இப்போதே வாங்கவும் (Buy Now)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // படங்களின் பட்டியலை வரையறுத்தல் (5 படங்கள்)
+        // இப்போது, நீங்கள் வழங்கிய புதிய பாதைகள் பயன்படுத்தப்பட்டுள்ளன
+        const PRODUCT_IMAGES = [
+            "image/ms_1yjed_512_557235006.jpg", // 1st Image (Main shot)
+            "image/ms_9szx0_512_557235008.jpg", // 2nd Image
+            "image/ms_ec3od_512_557235007.jpg", // 3rd Image
+            "image/ms_fvrpm_512_557235007.jpg", // 4th Image
+            "image/ms_ogqqc_512_557235008.jpg", // 5th Image
+        ];
+
+        const homeView = document.getElementById('home-view');
+        const detailsView = document.getElementById('details-view');
+        const mainImage = document.getElementById('main-image');
+        const thumbnailGallery = document.getElementById('thumbnail-gallery');
+
+        // தொடக்கத்தில் எந்தப் பக்கம் காட்டப்பட வேண்டும் என்பதை அமைத்தல்
+        let currentView = 'home'; 
+
+        // பட கேலரியை உருவாக்கவும்
+        function createThumbnailGallery() {
+            thumbnailGallery.innerHTML = ''; // பழைய படங்களை நீக்கவும்
+            PRODUCT_IMAGES.forEach((url, index) => {
+                const img = document.createElement('img');
+                img.src = url; 
+                img.alt = `தயாரிப்பு படம் ${index + 1}`;
+                img.className = 'w-16 h-16 md:w-20 md:h-20 object-cover rounded-lg cursor-pointer border-2 border-transparent transition duration-200 hover:border-primary-blue shadow-md';
+                img.onclick = () => changeMainImage(url, img);
+                thumbnailGallery.appendChild(img);
+            });
+            
+            // முதல் படத்தை முக்கிய படமாக அமைக்கவும்
+            changeMainImage(PRODUCT_IMAGES[0], thumbnailGallery.children[0]);
+        }
+        
+        // முக்கிய படத்தை மாற்றும் செயல்பாடு
+        function changeMainImage(newImageUrl, selectedThumbnail) {
+            mainImage.src = newImageUrl;
+            
+            // அனைத்து சிறுபடங்களின் எல்லையை நீக்கவும்
+            Array.from(thumbnailGallery.children).forEach(img => {
+                img.classList.remove('border-primary-blue', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+                img.classList.add('border-transparent');
+            });
+
+            // தேர்ந்தெடுக்கப்பட்ட சிறுபடத்திற்கு எல்லையை அமைக்கவும்
+            if (selectedThumbnail) {
+                selectedThumbnail.classList.remove('border-transparent');
+                selectedThumbnail.classList.add('border-primary-blue', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            }
+        }
+
+        // முகப்புப் பக்கத்தைக் காட்டவும்
+        function showHome() {
+            homeView.style.display = 'block';
+            detailsView.style.display = 'none';
+            currentView = 'home';
+            // பக்கத்தின் உச்சிக்கு செல்லவும்
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // தயாரிப்பு விவரங்கள் பக்கத்தைக் காட்டவும்
+        function showProductDetails() {
+            homeView.style.display = 'none';
+            detailsView.style.display = 'block';
+            currentView = 'details';
+            createThumbnailGallery(); // ஒவ்வொரு முறை வரும்போதும் கேலரியை புதுப்பிக்கவும்
+            // பக்கத்தின் உச்சிக்கு செல்லவும்
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // பக்கம் லோட் ஆனதும் முகப்புப் பக்கத்தைக் காட்டவும்
+        window.onload = showHome;
+
+        // URL மாற்றங்களை (back/forward) கையாள்வதற்கு ஒரு மாதிரி (Sample for handling browser history)
+        window.onpopstate = (event) => {
+            if (event.state && event.state.view === 'details') {
+                showProductDetails();
+            } else {
+                showHome();
+            }
+        };
+        
+    </script>
+</body>
+</html>l>
+
